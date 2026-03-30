@@ -1,0 +1,86 @@
+import { PRICING_TABLE, PricingRecord } from "./table";
+
+interface OpenRouterModelPricingShape {
+  prompt?: string | number;
+  completion?: string | number;
+}
+
+interface OpenRouterModelShape {
+  id?: string;
+  pricing?: OpenRouterModelPricingShape;
+}
+
+interface OpenRouterModelsResponse {
+  data?: OpenRouterModelShape[];
+}
+
+export function resolvePricing(provider: string, model: string): PricingRecord | null {
+  const exact = PRICING_TABLE[`${provider}:${model}`];
+  if (exact) {
+    return exact;
+  }
+
+  const fallback = PRICING_TABLE[`${provider}:default`];
+  return fallback ?? null;
+}
+
+export function estimateCostUsd(inputTokens: number, outputTokens: number, pricing: PricingRecord): number {
+  const inputCost = (Math.max(0, inputTokens) / 1_000_000) * pricing.inputPer1MTokens;
+  const outputCost = (Math.max(0, outputTokens) / 1_000_000) * pricing.outputPer1MTokens;
+
+  return Number((inputCost + outputCost).toFixed(6));
+}
+
+export async function fetchOpenRouterPricing(
+  apiKey: string,
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs: number = 20_000
+): Promise<Map<string, PricingRecord>> {
+  if (!apiKey) {
+    return new Map<string, PricingRecord>();
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetchImpl("https://openrouter.io/api/v1/models", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      return new Map<string, PricingRecord>();
+    }
+
+    const payload = (await response.json()) as OpenRouterModelsResponse;
+    const output = new Map<string, PricingRecord>();
+
+    for (const model of payload.data ?? []) {
+      if (!model.id || !model.pricing) {
+        continue;
+      }
+
+      const inputPerToken = Number(model.pricing.prompt ?? 0);
+      const outputPerToken = Number(model.pricing.completion ?? 0);
+      if (!Number.isFinite(inputPerToken) || !Number.isFinite(outputPerToken)) {
+        continue;
+      }
+
+      output.set(model.id, {
+        inputPer1MTokens: Number((inputPerToken * 1_000_000).toFixed(6)),
+        outputPer1MTokens: Number((outputPerToken * 1_000_000).toFixed(6)),
+      });
+    }
+
+    return output;
+  } catch {
+    return new Map<string, PricingRecord>();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
