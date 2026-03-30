@@ -1,3 +1,16 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: phase_6_complete
+last_updated: "2026-03-30T18:45:00.000Z"
+progress:
+  total_phases: 6
+  completed_phases: 6
+  total_plans: 23
+  completed_plans: 23
+---
+
 # Project State
 
 ## Project Reference
@@ -5,7 +18,7 @@
 See: `.planning/PROJECT.md` (updated 2026-03-30)
 
 **Core value:** Honest, reproducible comparison of MCP tool quality for E2E browser automation — exposing which MCPs actually work versus which ones hallucinate.
-**Current focus:** Ready for Phase 1 planning
+**Current focus:** Stabilization and hardening after completing Phase 6.
 
 ## Status
 
@@ -13,27 +26,30 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 - [x] Research complete (6 files in `.planning/research/`)
 - [x] Requirements defined (54 v1 requirements)
 - [x] Roadmap created (6 phases)
-- [x] Phase 1 planned
-- [x] Phase 1 executed (4 plans: SSE Server, Safety Harness, Gherkin Parser, UI Shell)
-- [x] Phase 1 summary complete
-- [ ] Phase 2 planned
+- [x] Phase 1 completed
+- [x] Phase 2 completed
+- [x] Phase 3 completed
+- [x] Phase 4 completed
+- [x] Phase 5 completed
+- [x] Phase 6 completed
 
-## Current Phase
+## Decisions
 
-**Phase 1:** Core Infrastructure & UI Shell  
-**Status:** ✅ COMPLETE (all 4 plans finished, 7/7 tests passing)  
-**Summary:** [.planning/phases/01-core-infrastructure-ui-shell/01-SUMMARY.md](.planning/phases/01-core-infrastructure-ui-shell/01-SUMMARY.md)
+- Parallel multi-MCP execution is handled by fan-out in `runManager` with isolated process lifecycle.
+- History persistence is per MCP run with export endpoints (JSON/CSV) and cumulative cost endpoint.
+- Vision validation uses deterministic tiered heuristics and explicit `hallucinated`/`needsReview` flags.
+- CLI runner/debug are shipped as `mcp-bench` local binary wrappers using `tsx`.
 
 ## Metrics
 
-- **Phase 1 Duration:** Full implementation + test fixes (1 auto-fix commit: e214c84c)
-- **Tests:** 7 passing, 0 failing
-- **TypeScript:** 0 errors
-- **Files Created/Modified:** 11 core files (server, client, harness, parser)
+- **Phases completed:** 6/6
+- **Plans completed:** 23/23
+- **TypeScript:** `tsc --noEmit` passing
+- **Tests:** `npm test` passing (105/105)
 
 ## Next Action
 
-Phase 1 complete. Ready for Phase 2 planning: LLM Provider Adapters & MCP Registry.
+Run UX/UAT validation on real MCP credentials and cloud providers, then freeze v1 and prepare release notes.
 
 ---
-*Updated: 2026-03-30 after Phase 1 completion*
+*Updated: 2026-03-30 after completing phases 3-6*

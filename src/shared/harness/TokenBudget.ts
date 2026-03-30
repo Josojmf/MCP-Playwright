@@ -10,6 +10,13 @@ export interface BudgetLimits {
   warnThresholdRatio: number; // e.g., 0.8 for 80%
 }
 
+export interface TokenCostInput {
+  inputTokens: number;
+  outputTokens: number;
+  inputPer1MTokensUsd: number;
+  outputPer1MTokensUsd: number;
+}
+
 export class TokenBudget {
   private usedTokens: number = 0;
   private hardCap: number;
@@ -41,7 +48,9 @@ export class TokenBudget {
   private checkThresholds() {
     if (!this.hasWarned && this.usedTokens >= this.warnCap) {
       this.hasWarned = true;
-      this.onWarn(`Warning: Tokens have reached ${this.warnCap} (>= ${this.usedTokens}) approach hard cap!`);
+      this.onWarn(
+        `Warning: token usage reached ${this.usedTokens} (warning threshold ${this.warnCap}, hard cap ${this.hardCap}).`
+      );
     }
   }
 
@@ -51,5 +60,11 @@ export class TokenBudget {
       cap: this.hardCap,
       remaining: this.hardCap - this.usedTokens
     };
+  }
+
+  public static estimateCostUsd(input: TokenCostInput): number {
+    const inputCost = (input.inputTokens / 1_000_000) * input.inputPer1MTokensUsd;
+    const outputCost = (input.outputTokens / 1_000_000) * input.outputPer1MTokensUsd;
+    return Number((inputCost + outputCost).toFixed(6));
   }
 }

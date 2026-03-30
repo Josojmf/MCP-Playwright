@@ -76,11 +76,7 @@ export class OpenAIAdapter implements LLMProvider {
   }
 
   public async estimateCost(inputTokens: number, outputTokens: number, model: string): Promise<number> {
-    const pricing = resolvePricing("openai", model);
-    if (!pricing) {
-      return 0;
-    }
-
-    return estimateCostUsd(inputTokens, outputTokens, pricing);
+    const pricing = resolvePricing("openai", model) ?? resolvePricing("openai", "default");
+    return estimateCostUsd(inputTokens, outputTokens, pricing ?? { inputPer1MTokens: 5, outputPer1MTokens: 15 });
   }
 }

@@ -12,23 +12,23 @@
 
 | Phase | Name | Goal Summary | Requirements | Status |
 |-------|------|--------------|--------------|--------|
-| 1 | Core Infrastructure & UI Shell | SSE streaming proven end-to-end, safety harness active, Gherkin parser handles all edge cases, basic UI shell up | 13 | Not started |
-| 2 | LLM Provider Adapters & MCP Registry | All 4 LLM adapters working, MCP registry with first 2 servers, provider swappable via config only | 12 | Not started |
-| 3 | Orchestrator Engine & Single-MCP Run | Full pipeline proven for one MCP: parse → orchestrate → dispatch → stream → save → display | 11 | Not started |
-| 4 | Parallel Execution Across Multiple MCPs | All registered MCPs run simultaneously, side-by-side comparison UI, cloud MCP support | 5 | Not started |
-| 5 | Screenshot Validation & Scorecard | Full hallucination detection, tiered vision validation, complete scorecard UI, cost dashboard | 10 | Not started |
-| 6 | CLI & Export | CI-ready headless CLI, debug mode, run history export, mcp-playwright community server | 5 | Not started |
+| 1 | Core Infrastructure & UI Shell | SSE streaming proven end-to-end, safety harness active, Gherkin parser handles all edge cases, basic UI shell up | 13 | Completed |
+| 2 | LLM Provider Adapters & MCP Registry | All 4 LLM adapters working, MCP registry with first 2 servers, provider swappable via config only | 12 | Completed |
+| 3 | Orchestrator Engine & Single-MCP Run | Full pipeline proven for one MCP: parse → orchestrate → dispatch → stream → save → display | 11 | Completed |
+| 4 | Parallel Execution Across Multiple MCPs | All registered MCPs run simultaneously, side-by-side comparison UI, cloud MCP support | 5 | Completed |
+| 5 | Screenshot Validation & Scorecard | Full hallucination detection, tiered vision validation, complete scorecard UI, cost dashboard | 10 | Completed |
+| 6 | CLI & Export | CI-ready headless CLI, debug mode, run history export, mcp-playwright community server | 5 | Completed |
 
 ---
 
 ## Phases
 
-- [ ] **Phase 1: Core Infrastructure & UI Shell** — SSE streaming, safety harness, Gherkin parser, basic UI shell
-- [ ] **Phase 2: LLM Provider Adapters & MCP Registry** — All 4 LLM adapters, MCP registry, provider-agnostic factory
-- [ ] **Phase 3: Orchestrator Engine & Single-MCP Run** — Full pipeline end-to-end on one MCP, run history, step UI
-- [ ] **Phase 4: Parallel Execution Across Multiple MCPs** — Concurrent multi-MCP runs, side-by-side UI, cloud MCPs
-- [ ] **Phase 5: Screenshot Validation & Scorecard** — Hallucination detection, tiered vision validation, full scorecard
-- [ ] **Phase 6: CLI & Export** — Headless CLI runner, debug mode, JSON/CSV export
+- [x] **Phase 1: Core Infrastructure & UI Shell** — SSE streaming, safety harness, Gherkin parser, basic UI shell
+- [x] **Phase 2: LLM Provider Adapters & MCP Registry** — All 4 LLM adapters, MCP registry, provider-agnostic factory
+- [x] **Phase 3: Orchestrator Engine & Single-MCP Run** — Full pipeline end-to-end on one MCP, run history, step UI
+- [x] **Phase 4: Parallel Execution Across Multiple MCPs** — Concurrent multi-MCP runs, side-by-side UI, cloud MCPs
+- [x] **Phase 5: Screenshot Validation & Scorecard** — Hallucination detection, tiered vision validation, full scorecard
+- [x] **Phase 6: CLI & Export** — Headless CLI runner, debug mode, JSON/CSV export
 
 ---
 
@@ -249,12 +249,12 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Infrastructure & UI Shell | 0/4 | Not started | - |
-| 2. LLM Provider Adapters & MCP Registry | 0/4 | Not started | - |
-| 3. Orchestrator Engine & Single-MCP Run | 0/5 | Not started | - |
-| 4. Parallel Execution Across Multiple MCPs | 0/3 | Not started | - |
-| 5. Screenshot Validation & Scorecard | 0/4 | Not started | - |
-| 6. CLI & Export | 0/3 | Not started | - |
+| 1. Core Infrastructure & UI Shell | 4/4 | Completed | 2026-03-30 |
+| 2. LLM Provider Adapters & MCP Registry | 4/4 | Completed | 2026-03-30 |
+| 3. Orchestrator Engine & Single-MCP Run | 5/5 | Completed | 2026-03-30 |
+| 4. Parallel Execution Across Multiple MCPs | 3/3 | Completed | 2026-03-30 |
+| 5. Screenshot Validation & Scorecard | 4/4 | Completed | 2026-03-30 |
+| 6. CLI & Export | 3/3 | Completed | 2026-03-30 |
 
 ---
 
@@ -262,66 +262,67 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | Phase 1 | Pending |
-| INFRA-02 | Phase 1 | Pending |
-| INFRA-03 | Phase 1 | Pending |
-| INFRA-04 | Phase 1 | Pending |
-| INFRA-05 | Phase 1 | Pending |
-| INFRA-06 | Phase 1 | Pending |
-| INFRA-07 | Phase 5 | Pending |
-| GHERKIN-01 | Phase 1 | Pending |
-| GHERKIN-02 | Phase 1 | Pending |
-| GHERKIN-03 | Phase 1 | Pending |
-| GHERKIN-04 | Phase 1 | Pending |
-| GHERKIN-05 | Phase 2 | Pending |
-| ORCH-01 | Phase 2 | Pending |
-| ORCH-02 | Phase 2 | Pending |
-| ORCH-03 | Phase 2 | Pending |
-| ORCH-04 | Phase 2 | Pending |
-| ORCH-05 | Phase 2 | Pending |
-| ORCH-06 | Phase 2 | Pending |
-| ORCH-07 | Phase 2 | Pending |
-| ORCH-08 | Phase 3 | Pending |
-| ORCH-09 | Phase 2 | Pending |
-| REGISTRY-01 | Phase 2 | Pending |
-| REGISTRY-02 | Phase 2 | Pending |
-| REGISTRY-03 | Phase 2 | Pending |
-| REGISTRY-04 | Phase 4 | Pending |
-| REGISTRY-05 | Phase 4 | Pending |
-| REGISTRY-06 | Phase 2 | Pending |
-| EXEC-01 | Phase 3 | Pending |
-| EXEC-02 | Phase 4 | Pending |
-| EXEC-03 | Phase 3 | Pending |
-| EXEC-04 | Phase 3 | Pending |
-| EXEC-05 | Phase 3 | Pending |
-| EXEC-06 | Phase 4 | Pending |
-| EXEC-07 | Phase 4 | Pending |
-| VALID-01 | Phase 3 | Pending |
-| VALID-02 | Phase 3 | Pending |
-| VALID-03 | Phase 5 | Pending |
-| VALID-04 | Phase 5 | Pending |
-| VALID-05 | Phase 5 | Pending |
-| VALID-06 | Phase 5 | Pending |
-| VALID-07 | Phase 5 | Pending |
-| UI-01 | Phase 1 | Pending |
-| UI-02 | Phase 1 | Pending |
-| UI-03 | Phase 3 | Pending |
-| UI-04 | Phase 3 | Pending |
-| UI-05 | Phase 5 | Pending |
-| UI-06 | Phase 5 | Pending |
-| UI-07 | Phase 5 | Pending |
-| UI-08 | Phase 1 | Pending |
-| UI-09 | Phase 1 | Pending |
-| CLI-01 | Phase 6 | Pending |
-| CLI-02 | Phase 6 | Pending |
-| CLI-03 | Phase 6 | Pending |
-| HIST-01 | Phase 3 | Pending |
-| HIST-02 | Phase 6 | Pending |
-| HIST-03 | Phase 3 | Pending |
+| INFRA-01 | Phase 1 | Completed |
+| INFRA-02 | Phase 1 | Completed |
+| INFRA-03 | Phase 1 | Completed |
+| INFRA-04 | Phase 1 | Completed |
+| INFRA-05 | Phase 1 | Completed |
+| INFRA-06 | Phase 1 | Completed |
+| INFRA-07 | Phase 5 | Completed |
+| GHERKIN-01 | Phase 1 | Completed |
+| GHERKIN-02 | Phase 1 | Completed |
+| GHERKIN-03 | Phase 1 | Completed |
+| GHERKIN-04 | Phase 1 | Completed |
+| GHERKIN-05 | Phase 2 | Completed |
+| ORCH-01 | Phase 2 | Completed |
+| ORCH-02 | Phase 2 | Completed |
+| ORCH-03 | Phase 2 | Completed |
+| ORCH-04 | Phase 2 | Completed |
+| ORCH-05 | Phase 2 | Completed |
+| ORCH-06 | Phase 2 | Completed |
+| ORCH-07 | Phase 2 | Completed |
+| ORCH-08 | Phase 3 | Completed |
+| ORCH-09 | Phase 2 | Completed |
+| REGISTRY-01 | Phase 2 | Completed |
+| REGISTRY-02 | Phase 2 | Completed |
+| REGISTRY-03 | Phase 2 | Completed |
+| REGISTRY-04 | Phase 4 | Completed |
+| REGISTRY-05 | Phase 4 | Completed |
+| REGISTRY-06 | Phase 2 | Completed |
+| EXEC-01 | Phase 3 | Completed |
+| EXEC-02 | Phase 4 | Completed |
+| EXEC-03 | Phase 3 | Completed |
+| EXEC-04 | Phase 3 | Completed |
+| EXEC-05 | Phase 3 | Completed |
+| EXEC-06 | Phase 4 | Completed |
+| EXEC-07 | Phase 4 | Completed |
+| VALID-01 | Phase 3 | Completed |
+| VALID-02 | Phase 3 | Completed |
+| VALID-03 | Phase 5 | Completed |
+| VALID-04 | Phase 5 | Completed |
+| VALID-05 | Phase 5 | Completed |
+| VALID-06 | Phase 5 | Completed |
+| VALID-07 | Phase 5 | Completed |
+| UI-01 | Phase 1 | Completed |
+| UI-02 | Phase 1 | Completed |
+| UI-03 | Phase 3 | Completed |
+| UI-04 | Phase 3 | Completed |
+| UI-05 | Phase 5 | Completed |
+| UI-06 | Phase 5 | Completed |
+| UI-07 | Phase 5 | Completed |
+| UI-08 | Phase 1 | Completed |
+| UI-09 | Phase 1 | Completed |
+| CLI-01 | Phase 6 | Completed |
+| CLI-02 | Phase 6 | Completed |
+| CLI-03 | Phase 6 | Completed |
+| HIST-01 | Phase 3 | Completed |
+| HIST-02 | Phase 6 | Completed |
+| HIST-03 | Phase 3 | Completed |
 
 **Coverage: 54/54 v1 requirements mapped — no orphans.**
 
 ---
 
 *Roadmap created: 2026-03-30*
-*Last updated: 2026-03-30 after initial creation*
+*Last updated: 2026-03-30 after Phase 6 completion*
+

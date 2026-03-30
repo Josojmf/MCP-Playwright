@@ -1,4 +1,5 @@
 import { estimateCostUsd, fetchOpenRouterPricing, resolvePricing } from "../../pricing/resolver";
+import type { PricingRecord } from "../../pricing/table";
 import { LLMChunk, LLMMessage, LLMProvider, LLMRequest, LLMResponse, LLMUsage } from "../types";
 
 interface OpenRouterChatCompletionResponse {
@@ -9,8 +10,8 @@ interface OpenRouterChatCompletionResponse {
 }
 
 export class OpenRouterAdapter implements LLMProvider {
-  private readonly endpoint = "https://openrouter.io/api/v1/chat/completions";
-  private readonly pricingPromise: Promise<Map<string, { inputPer1MTokens: number; outputPer1MTokens: number }>>;
+  private readonly endpoint = "https://openrouter.ai/api/v1/chat/completions";
+  private readonly pricingPromise: Promise<Map<string, PricingRecord>>;
 
   constructor(private readonly apiKey: string, private readonly fetchImpl: typeof fetch = fetch) {
     this.pricingPromise = fetchOpenRouterPricing(apiKey, fetchImpl);
@@ -89,11 +90,7 @@ export class OpenRouterAdapter implements LLMProvider {
       return estimateCostUsd(inputTokens, outputTokens, dynamic);
     }
 
-    const fallback = resolvePricing("openrouter", model);
-    if (!fallback) {
-      return 0;
-    }
-
-    return estimateCostUsd(inputTokens, outputTokens, fallback);
+    const fallback = resolvePricing("openrouter", model) ?? resolvePricing("openrouter", "default");
+    return estimateCostUsd(inputTokens, outputTokens, fallback ?? { inputPer1MTokens: 8, outputPer1MTokens: 24 });
   }
 }

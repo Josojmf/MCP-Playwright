@@ -140,11 +140,7 @@ export class ClaudeAdapter implements LLMProvider {
   }
 
   public async estimateCost(inputTokens: number, outputTokens: number, model: string): Promise<number> {
-    const pricing = resolvePricing("claude", model);
-    if (!pricing) {
-      return 0;
-    }
-
-    return estimateCostUsd(inputTokens, outputTokens, pricing);
+    const pricing = resolvePricing("claude", model) ?? resolvePricing("claude", "default");
+    return estimateCostUsd(inputTokens, outputTokens, pricing ?? { inputPer1MTokens: 3, outputPer1MTokens: 15 });
   }
 }

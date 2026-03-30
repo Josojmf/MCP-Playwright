@@ -2,10 +2,15 @@
   "name": "mcp-playwright",
   "version": "1.0.0",
   "main": "index.js",
+  "bin": {
+    "mcp-bench": "bin/mcp-bench.js"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node ./node_modules/tsx/dist/cli.mjs --test \"src/**/*.test.ts\"",
+    "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
     "dev": "concurrently \"vite\" \"tsx src/server/index.ts\"",
-    "build": "vite build"
+    "build": "vite build",
+    "cli": "node ./bin/mcp-bench.js"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +21,8 @@
     "@cucumber/gherkin": "^39.0.0",
     "@cucumber/messages": "^32.2.0",
     "@fontsource-variable/geist": "^5.2.8",
+    "@radix-ui/react-checkbox": "^1.3.3",
+    "better-sqlite3": "^11.10.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "concurrently": "^9.2.1",

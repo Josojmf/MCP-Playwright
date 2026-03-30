@@ -1,20 +1,24 @@
-export type MCPTransportMode = "stdio" | "sse" | "http";
-export type MCPParallelismModel = "single" | "multiple";
-
-export interface MCPAuthRequirement {
-  envVar: string;
-  description?: string;
-}
-
 export interface MCPServerEntry {
   id: string;
   label: string;
   toolNamespacePrefix: string;
-  transportMode: MCPTransportMode;
-  requiresAuth?: MCPAuthRequirement;
-  parallelismModel: MCPParallelismModel;
+  transportMode: 'stdio' | 'sse' | 'http';
+  requiresAuth?: {
+    envVar: string;
+    description?: string;
+  };
+  parallelismModel: 'single' | 'multiple';
   tags?: string[];
   description?: string;
 }
 
-export type MCPRegistry = Record<string, MCPServerEntry>;
+export interface MCPRegistry {
+  [serverId: string]: MCPServerEntry;
+}
+
+// Minimal ToolDefinition shape (MCP SDK compatible — full type imported in Phase 3)
+export interface ToolDefinition {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+}

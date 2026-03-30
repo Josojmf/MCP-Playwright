@@ -10,7 +10,7 @@ interface AzureChatCompletionResponse {
 
 export class AzureOpenAIAdapter implements LLMProvider {
   constructor(
-    private readonly endpoint: string,
+    private readonly resourceNameOrEndpoint: string,
     private readonly deploymentName: string,
     private readonly apiKey: string,
     private readonly apiVersion: string = "2024-12-01-preview",
@@ -18,7 +18,8 @@ export class AzureOpenAIAdapter implements LLMProvider {
   ) {}
 
   public async complete(request: LLMRequest): Promise<LLMResponse> {
-    const url = `${this.endpoint.replace(/\/$/, "")}/openai/deployments/${this.deploymentName}/chat/completions?api-version=${this.apiVersion}`;
+    const endpoint = this.resolveEndpoint();
+    const url = `${endpoint}/openai/deployments/${this.deploymentName}/chat/completions?api-version=${this.apiVersion}`;
 
     const response = await this.fetchImpl(url, {
       method: "POST",
@@ -81,11 +82,16 @@ export class AzureOpenAIAdapter implements LLMProvider {
   }
 
   public async estimateCost(inputTokens: number, outputTokens: number, model: string): Promise<number> {
-    const pricing = resolvePricing("azure", model);
-    if (!pricing) {
-      return 0;
+    const pricing = resolvePricing("azure", model) ?? resolvePricing("azure", "default");
+    return estimateCostUsd(inputTokens, outputTokens, pricing ?? { inputPer1MTokens: 5, outputPer1MTokens: 15 });
+  }
+
+  private resolveEndpoint(): string {
+    const raw = this.resourceNameOrEndpoint.trim().replace(/\/$/, "");
+    if (/^https?:\/\//i.test(raw)) {
+      return raw;
     }
 
-    return estimateCostUsd(inputTokens, outputTokens, pricing);
+    return `https://${raw}.openai.azure.com`;
   }
 }

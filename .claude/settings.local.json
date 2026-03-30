@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(node:*)",
-      "Bash(test -f \"$HOME/.gsd/defaults.json\")"
+      "Bash(test -f \"$HOME/.gsd/defaults.json\")",
+      "Skill(gsd:do)",
+      "Skill(gsd:ui-phase)"
     ]
   }
 }

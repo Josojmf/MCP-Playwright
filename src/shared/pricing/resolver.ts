@@ -1,50 +1,39 @@
 import { PRICING_TABLE, PricingRecord } from "./table";
 
-interface OpenRouterModelPricingShape {
-  prompt?: string | number;
-  completion?: string | number;
-}
-
-interface OpenRouterModelShape {
-  id?: string;
-  pricing?: OpenRouterModelPricingShape;
-}
-
 interface OpenRouterModelsResponse {
-  data?: OpenRouterModelShape[];
+  data?: Array<{
+    id?: string;
+    pricing?: {
+      prompt?: string | number;
+      completion?: string | number;
+    };
+  }>;
 }
 
 export function resolvePricing(provider: string, model: string): PricingRecord | null {
-  const exact = PRICING_TABLE[`${provider}:${model}`];
-  if (exact) {
-    return exact;
-  }
-
-  const fallback = PRICING_TABLE[`${provider}:default`];
-  return fallback ?? null;
+  return PRICING_TABLE[`${provider}:${model}`] ?? null;
 }
 
 export function estimateCostUsd(inputTokens: number, outputTokens: number, pricing: PricingRecord): number {
   const inputCost = (Math.max(0, inputTokens) / 1_000_000) * pricing.inputPer1MTokens;
   const outputCost = (Math.max(0, outputTokens) / 1_000_000) * pricing.outputPer1MTokens;
-
   return Number((inputCost + outputCost).toFixed(6));
 }
 
 export async function fetchOpenRouterPricing(
-  apiKey: string,
+  apiKey: string = process.env.OPENROUTER_API_KEY ?? "",
   fetchImpl: typeof fetch = fetch,
-  timeoutMs: number = 20_000
+  timeoutMs = 20_000
 ): Promise<Map<string, PricingRecord>> {
   if (!apiKey) {
-    return new Map<string, PricingRecord>();
+    return new Map();
   }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetchImpl("https://openrouter.io/api/v1/models", {
+    const response = await fetchImpl("https://openrouter.ai/api/v1/models", {
       method: "GET",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -54,7 +43,7 @@ export async function fetchOpenRouterPricing(
     });
 
     if (!response.ok) {
-      return new Map<string, PricingRecord>();
+      return new Map();
     }
 
     const payload = (await response.json()) as OpenRouterModelsResponse;
@@ -79,7 +68,7 @@ export async function fetchOpenRouterPricing(
 
     return output;
   } catch {
-    return new Map<string, PricingRecord>();
+    return new Map();
   } finally {
     clearTimeout(timeout);
   }
