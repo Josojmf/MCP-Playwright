@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(test -f \"$HOME/.gsd/defaults.json\")"
+    ]
+  }
+}
