@@ -1,0 +1,87 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import { PhaseOneRunManager, RequestValidationError } from "./runManager";
+
+const loggerStub = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+  debug: () => undefined,
+  trace: () => undefined,
+  fatal: () => undefined,
+} as any;
+
+test("estimateRun acepta baseUrl sin esquema y la normaliza implícitamente", () => {
+  const manager = new PhaseOneRunManager(loggerStub);
+
+  const estimate = manager.estimateRun({
+    baseUrl: "google.es",
+    featureText: `Feature: Demo\n  Scenario: buscar\n    Given User is on google page\n    When User search for \"Cucumber BDD\"\n    Then User should see results related to \"Cucumber BDD\"`,
+    selectedMcpIds: ["@playwright/mcp"],
+    tokenCap: 12000,
+  });
+
+  assert.equal(estimate.scenarioCount, 1);
+  assert.equal(estimate.stepCount, 3);
+  assert.equal(estimate.selectedMcpCount, 1);
+});
+
+test("estimateRun acepta Gherkin shorthand Given/When/Then sin Feature:", () => {
+  const manager = new PhaseOneRunManager(loggerStub);
+
+  const estimate = manager.estimateRun({
+    baseUrl: "https://google.es",
+    featureText: `Given User is on google page\nWhen User search for \"Cucumber BDD\"\nThen User should see results related to \"Cucumber BDD\"`,
+    selectedMcpIds: ["@playwright/mcp"],
+    tokenCap: 12000,
+  });
+
+  assert.equal(estimate.scenarioCount, 1);
+  assert.equal(estimate.stepCount, 3);
+  assert.equal(estimate.totalExecutions, 3);
+});
+
+test("estimateRun mantiene error para URL claramente inválida", () => {
+  const manager = new PhaseOneRunManager(loggerStub);
+
+  assert.throws(
+    () =>
+      manager.estimateRun({
+        baseUrl: "http://",
+        featureText: `Feature: Demo\n  Scenario: x\n    Given paso`,
+        selectedMcpIds: ["@playwright/mcp"],
+        tokenCap: 12000,
+      }),
+    (error) => error instanceof RequestValidationError && /Base URL no es válido/i.test(error.message)
+  );
+});
+
+test("estimateRun normaliza aliases de MCP y elimina duplicados/no soportados", () => {
+  const manager = new PhaseOneRunManager(loggerStub);
+
+  const estimate = manager.estimateRun({
+    baseUrl: "https://google.es",
+    featureText: `Feature: Demo\n  Scenario: buscar\n    Given User is on google page\n    When User search for \"Cucumber BDD\"\n    Then User should see results related to \"Cucumber BDD\"`,
+    selectedMcpIds: ["puppeteer", "@modelcontextprotocol/server-puppeteer", "browserbase", "no-existe"],
+    tokenCap: 12000,
+  });
+
+  assert.equal(estimate.selectedMcpCount, 2);
+  assert.equal(estimate.totalExecutions, 6);
+});
+
+test("estimateRun falla si no queda ningún MCP soportado tras normalizar", () => {
+  const manager = new PhaseOneRunManager(loggerStub);
+
+  assert.throws(
+    () =>
+      manager.estimateRun({
+        baseUrl: "https://google.es",
+        featureText: `Feature: Demo\n  Scenario: x\n    Given paso`,
+        selectedMcpIds: ["inexistente-1", "inexistente-2"],
+        tokenCap: 12000,
+      }),
+    (error) => error instanceof RequestValidationError && /mcp soportado/i.test(error.message)
+  );
+});

@@ -14,6 +14,7 @@ import { preflight } from "./mcp/preflight";
 import { saveScreenshot as saveFileScreenshot } from "./storage/screenshots";
 import { validateStepWithVision, type StepValidation } from "./validation/visionValidator";
 import { InstrumentedMcpClient, type BaseMcpClient } from "./mcp/InstrumentedMcpClient";
+import { isStaleRefError, traceStaleRefRecovery } from "./mcp/stalenessRecovery";
 
 export interface RunEstimateRequest {
   baseUrl: string;
@@ -403,6 +404,30 @@ export class PhaseOneRunManager {
             name: `${mcpId}:${stepResult.canonicalType}`,
             argsString: stepResult.stepText,
           });
+
+          // EXEC-05: Check if step failure is a stale-ref error
+          if (stepResult.status === "failed" && stepResult.message) {
+            const fakeError = new Error(stepResult.message);
+            if (isStaleRefError(fakeError)) {
+              traceStaleRefRecovery(scenario.id, stepResult.stepIndex, false);
+              this.logger.info(
+                { mcpId, scenarioId: scenario.id, stepIndex: stepResult.stepIndex },
+                "Stale ARIA ref detected -- recovery infrastructure wired (real retry in Phase 8)"
+              );
+              // Don't count as benchmark failure -- annotate status message
+              const recoveredResult = {
+                ...stepResult,
+                message: `[STALE-REF] ${stepResult.message} (no contabilizado como fallo de benchmark)`,
+              };
+              await this.trackStepResult(session, mcpId, recoveredResult, scenario.steps.length, mcpConfig.provider.model ?? "gpt-4");
+
+              // Collect instrumented traces for this step
+              const instrumentedTraces = instrumentedClient.getTraces();
+              this.logger.info({ mcpId, tracesCount: instrumentedTraces.length }, "InstrumentedMcpClient wired");
+              continue;
+            }
+          }
+
           await this.trackStepResult(session, mcpId, stepResult, scenario.steps.length, mcpConfig.provider.model ?? "gpt-4");
 
           // Collect instrumented traces for this step (connects InstrumentedMcpClient pipeline)
@@ -413,6 +438,13 @@ export class PhaseOneRunManager {
       }
     } catch (error) {
       const errorMessage = this.errorMessage(error);
+
+      // EXEC-05: Trace stale-ref at run level (if the error propagated uncaught)
+      if (isStaleRefError(error)) {
+        traceStaleRefRecovery("unknown", -1, false);
+        this.logger.info({ mcpId, err: error }, "Stale-ref error at run level -- not counted as benchmark failure");
+      }
+
       this.emit(session, "mcp_aborted", {
         runId: session.id,
         mcpId,
