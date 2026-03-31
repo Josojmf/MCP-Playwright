@@ -56,7 +56,7 @@
 
 ### Validation & Anti-Hallucination
 
-- [ ] **VALID-01**: `InstrumentedMcpClient` proxy captures screenshot from platform's own independent Playwright `Page` after every MCP tool call
+- [x] **VALID-01**: `InstrumentedMcpClient` proxy captures screenshot from platform's own independent Playwright `Page` after every MCP tool call
 - [x] **VALID-02**: Playwright `expect()` assertions run independently on `Then` steps using translated assertion registry
 - [ ] **VALID-03**: Tiered vision LLM validation: fast cheap model (`detail: low`) first; escalate to high-accuracy model (`detail: high`) only when confidence > 0.8 and verdict is `contradicts`
 - [ ] **VALID-04**: Hallucination flag asserted only when: Playwright passed + LLM verdict `contradicts` + confidence > 0.7
@@ -162,7 +162,7 @@
 | EXEC-05 | Phase 7 | Pending |
 | EXEC-06 | Phase 4 | Pending |
 | EXEC-07 | Phase 9 | Pending |
-| VALID-01 | Phase 7 | Pending |
+| VALID-01 | Phase 7 | Complete |
 | VALID-02 | Phase 7 | Complete |
 | VALID-03 | Phase 9 | Pending |
 | VALID-04 | Phase 9 | Pending |

@@ -8,7 +8,7 @@ progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 9
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Project State
@@ -43,6 +43,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 - BudgetExceededError is fatal in OrchestratorService: generator returns entirely (not continueOnError) when token cap exceeded (07-05).
 - checkBudget() placed before withTimeout(provider.complete()) to block LLM call before any network cost (07-05).
 - [Phase 07]: VALID-02: runAssertion() called on Then steps after LLM success; assertion failure overrides step status to 'failed' independently of MCP report
+- [Phase 07-02]: InstrumentedMcpClient wired with stub BaseMcpClient in executeMcpRun; Phase 8 replaces stub with real protocol client for real screenshot capture
 
 ## Metrics
 
