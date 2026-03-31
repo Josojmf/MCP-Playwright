@@ -280,6 +280,60 @@ test("runScenario maintains conversation history between steps", async (t) => {
   });
 });
 
+// Shared fixtures for budget and abort tests
+const sharedMCPConfig: MCPConfig = {
+  id: "test-mcp-1",
+  provider: {
+    provider: "openai",
+    model: "gpt-4",
+  } as ProviderConfig,
+};
+
+const oneStepScenario: ScenarioPlan = {
+  id: "scenario-1",
+  name: "Test Scenario",
+  tags: ["@test"],
+  steps: [
+    {
+      keyword: "Given",
+      canonicalType: "given",
+      text: "I have a test step",
+    },
+  ],
+};
+
+test("runScenario aborts when token budget is exceeded before LLM call", async () => {
+  const mockProvider = new MockLLMProvider();
+  const orchestrator = new OrchestratorService(mockProvider);
+  const tightBudget = new TokenBudget(
+    { hardCapTokens: 100, warnThresholdRatio: 0.8 },
+    () => {}
+  );
+  // Pre-fill budget to exceed the cap
+  tightBudget.addUsage(101);
+
+  const ctx: RunContext = {
+    runId: randomUUID(),
+    scenario: oneStepScenario,
+    mcpConfig: sharedMCPConfig,
+    conversationHistory: [],
+    tokenBudget: tightBudget,
+    abortSignal: new AbortController().signal,
+  };
+
+  const results: StepResult[] = [];
+  for await (const result of orchestrator.runScenario(oneStepScenario, ctx)) {
+    results.push(result);
+  }
+  assert.equal(results.length, 1);
+  assert.equal(results[0].status, "aborted");
+  assert.ok(
+    results[0].message.includes("Presupuesto de tokens excedido") ||
+      results[0].message.includes("budget"),
+    `Expected budget message, got: ${results[0].message}`
+  );
+});
+
 test("AsyncGenerator behavior", async (t) => {
   const mockProvider = new MockLLMProvider();
   const orchestrator = new OrchestratorService(mockProvider);
