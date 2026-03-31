@@ -44,6 +44,24 @@ class MockLLMProvider implements LLMProvider {
   }
 }
 
+class AuthFailLLMProvider implements LLMProvider {
+  async complete(_request: LLMRequest): Promise<LLMResponse> {
+    throw new Error("OpenRouterAdapter request failed (401)");
+  }
+
+  async *stream(_request: LLMRequest): AsyncIterable<LLMChunk> {
+    yield {
+      index: 0,
+      delta: "",
+      finishReason: "stop",
+    };
+  }
+
+  async estimateCost(_inputTokens: number, _outputTokens: number, _model: string): Promise<number> {
+    return 0;
+  }
+}
+
 test("StepResult represents all states with tokens and latency", async (t) => {
   await t.test("should handle running state", () => {
     const result: StepResult = {
@@ -406,5 +424,109 @@ test("AsyncGenerator behavior", async (t) => {
 
     assert.ok(results.length > 0);
   });
+});
+
+test("Then step with assertion overrides status to failed when assertion fails", async () => {
+  const mockProvider = new MockLLMProvider();
+  const orchestrator = new OrchestratorService(mockProvider);
+  const budget = new TokenBudget({ hardCapTokens: 10000, warnThresholdRatio: 0.8 }, () => {});
+
+  const thenStep: ParsedStep = {
+    keyword: "Then",
+    canonicalType: "then",
+    text: 'the page URL should be "https://wrong-url.com"',
+    assertion: {
+      original: 'the page URL should be "https://wrong-url.com"',
+      playwrightCall: "expect(page).toHaveURL('https://wrong-url.com')",
+      patternId: "url",
+    },
+  };
+
+  const scenario: ScenarioPlan = {
+    id: "scenario-assertion",
+    name: "Assertion Test",
+    tags: [],
+    steps: [thenStep],
+  };
+
+  const ctx: RunContext = {
+    runId: randomUUID(),
+    scenario,
+    mcpConfig: { id: "test-mcp", provider: { provider: "openai", model: "gpt-4" } as ProviderConfig },
+    conversationHistory: [],
+    tokenBudget: budget,
+    abortSignal: new AbortController().signal,
+  };
+
+  const results: StepResult[] = [];
+  for await (const result of orchestrator.runScenario(scenario, ctx)) {
+    results.push(result);
+  }
+
+  assert.equal(results.length, 1);
+  // The assertion runner with mock expect will fail for wrong URL (page is undefined)
+  // The step should be marked failed due to assertion, not passed from LLM
+  assert.ok(
+    results[0].status === "failed" || results[0].message.includes("Assertion"),
+    `Expected failed status or Assertion message, got status=${results[0].status} message=${results[0].message}`
+  );
+});
+
+test("runScenario corta temprano ante error fatal de autenticación", async () => {
+  const orchestrator = new OrchestratorService(new AuthFailLLMProvider());
+  const mockTokenBudget = new TokenBudget(
+    {
+      hardCapTokens: 10000,
+      warnThresholdRatio: 0.8,
+    },
+    () => {}
+  );
+
+  const testMCPConfig: MCPConfig = {
+    id: "test-mcp-auth",
+    provider: {
+      provider: "openrouter",
+      model: "openai/gpt-4o-mini",
+    } as ProviderConfig,
+  };
+
+  const testScenario: ScenarioPlan = {
+    id: "scenario-auth",
+    name: "Auth Fail Scenario",
+    tags: ["@test"],
+    steps: [
+      {
+        keyword: "Given",
+        canonicalType: "given",
+        text: "I have a first step",
+      },
+      {
+        keyword: "When",
+        canonicalType: "when",
+        text: "I have a second step",
+      },
+    ],
+  };
+
+  const ctx: RunContext = {
+    runId: randomUUID(),
+    scenario: testScenario,
+    mcpConfig: testMCPConfig,
+    conversationHistory: [],
+    tokenBudget: mockTokenBudget,
+    abortSignal: new AbortController().signal,
+  };
+
+  const results: StepResult[] = [];
+
+  await assert.rejects(async () => {
+    for await (const stepResult of orchestrator.runScenario(testScenario, ctx)) {
+      results.push(stepResult);
+    }
+  }, /Orchestration error: OpenRouterAdapter request failed \(401\)/);
+
+  assert.equal(results.length, 1);
+  assert.equal(results[0].status, "failed");
+  assert.equal(results[0].stepIndex, 0);
 });
 

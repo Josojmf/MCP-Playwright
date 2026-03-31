@@ -5,6 +5,7 @@ import { withTimeout, TIMEOUT_TIERS } from "../../shared/harness/withTimeout";
 import { LLMMessage, LLMRequest, LLMProvider } from "../../shared/llm/types";
 import { createProvider } from "../../shared/llm/factory";
 import { BudgetExceededError } from "../../shared/harness/TokenBudget";
+import { runAssertion, AssertionResult } from "../validation/assertionsRunner";
 
 /**
  * OrchestratorService orchestrates sequential execution of a scenario
@@ -119,20 +120,31 @@ Scenario: ${scenario.name}`,
           // Add tokens to budget
           ctx.tokenBudget.addUsage(response.usage.totalTokens);
 
+          // VALID-02: Run independent assertion for Then steps
+          let assertionOverride: AssertionResult | null = null;
+          if (step.canonicalType === "then" && step.assertion) {
+            assertionOverride = await runAssertion(step.assertion, {});
+          }
+
+          const stepStatus = assertionOverride?.status === "failed" ? "failed" : "passed";
+          const stepResultMessage = assertionOverride?.status === "failed"
+            ? `Assertion independiente falló: ${assertionOverride.message}`
+            : `Paso completado exitosamente (${response.usage.totalTokens} tokens)`;
+
           // Yield success result
           yield this.createStepResult(
             ctx.mcpConfig.id,
             step,
             scenario,
             stepIndex,
-            "passed",
+            stepStatus,
             {
               input: response.usage.promptTokens,
               output: response.usage.completionTokens,
               total: response.usage.totalTokens,
             },
             latencyMs,
-            `Paso completado exitosamente (${response.usage.totalTokens} tokens)`,
+            stepResultMessage,
             toolCalls
           );
         } catch (error) {
@@ -183,6 +195,10 @@ Scenario: ${scenario.name}`,
             `Falló la ejecución: ${errorMessage}`,
             []
           );
+
+          if (this.isFatalStepError(errorMessage)) {
+            throw new Error(errorMessage);
+          }
 
           if (!continueOnError) {
             throw error;
@@ -256,5 +272,17 @@ Scenario: ${scenario.name}`,
     }
 
     return toolCalls;
+  }
+
+  private isFatalStepError(errorMessage: string): boolean {
+    const normalized = errorMessage.toLowerCase();
+    return (
+      normalized.includes("missing credential") ||
+      normalized.includes("request failed (401)") ||
+      normalized.includes("request failed (403)") ||
+      normalized.includes("unsupported provider") ||
+      normalized.includes("requires azureendpoint") ||
+      normalized.includes("requires azuredeploymentname")
+    );
   }
 }
