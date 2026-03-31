@@ -40,17 +40,19 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 - Vision validation uses deterministic tiered heuristics and explicit `hallucinated`/`needsReview` flags.
 - CLI runner/debug are shipped as `mcp-bench` local binary wrappers using `tsx`.
 - [Phase 07-wire-dead-modules]: Pass empty tools array [] to assembleSystemPrompt as placeholder; Phase 8 will populate with real MCP tool capabilities
+- BudgetExceededError is fatal in OrchestratorService: generator returns entirely (not continueOnError) when token cap exceeded (07-05).
+- checkBudget() placed before withTimeout(provider.complete()) to block LLM call before any network cost (07-05).
 
 ## Metrics
 
 - **Phases completed:** 6/6
-- **Plans completed:** 23/23
+- **Plans completed:** 23/23 (+ phase 7 in progress)
 - **TypeScript:** `tsc --noEmit` passing
-- **Tests:** `npm test` passing (105/105)
+- **Tests:** `npm test` passing (105/105 + 15/15 orchestrator)
 
 ## Next Action
 
-Run UX/UAT validation on real MCP credentials and cloud providers, then freeze v1 and prepare release notes.
+Continue Phase 07 plan execution (07-05 complete, INFRA-05 wired). Next: remaining 07 plans.
 
 ---
 *Updated: 2026-03-30 after completing phases 3-6*

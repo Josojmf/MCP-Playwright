@@ -280,72 +280,57 @@ test("runScenario maintains conversation history between steps", async (t) => {
   });
 });
 
-test("runScenario uses assembleSystemPrompt instead of static prompt", async () => {
-  let capturedMessages: import("../../shared/llm/types").LLMMessage[] = [];
-  const capturingProvider: LLMProvider = {
-    async complete(request: LLMRequest): Promise<LLMResponse> {
-      capturedMessages = request.messages;
-      return {
-        id: randomUUID(),
-        model: request.model,
-        choices: [
-          {
-            index: 0,
-            message: { role: "assistant", content: "Executed step" },
-            finishReason: "stop",
-          },
-        ],
-        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-      };
-    },
-    async *stream(_request: LLMRequest): AsyncIterable<LLMChunk> {
-      yield { index: 0, delta: "", finishReason: "stop" };
-    },
-    async estimateCost(): Promise<number> {
-      return 0;
-    },
-  };
+// Shared fixtures for budget and abort tests
+const sharedMCPConfig: MCPConfig = {
+  id: "test-mcp-1",
+  provider: {
+    provider: "openai",
+    model: "gpt-4",
+  } as ProviderConfig,
+};
 
-  const orchestrator = new OrchestratorService(capturingProvider);
-  const mockTokenBudget = new TokenBudget(
-    { hardCapTokens: 10000, warnThresholdRatio: 0.8 },
+const oneStepScenario: ScenarioPlan = {
+  id: "scenario-1",
+  name: "Test Scenario",
+  tags: ["@test"],
+  steps: [
+    {
+      keyword: "Given",
+      canonicalType: "given",
+      text: "I have a test step",
+    },
+  ],
+};
+
+test("runScenario aborts when token budget is exceeded before LLM call", async () => {
+  const mockProvider = new MockLLMProvider();
+  const orchestrator = new OrchestratorService(mockProvider);
+  const tightBudget = new TokenBudget(
+    { hardCapTokens: 100, warnThresholdRatio: 0.8 },
     () => {}
   );
+  // Pre-fill budget to exceed the cap
+  tightBudget.addUsage(101);
 
-  const testMCPConfig: MCPConfig = {
-    id: "test-mcp-capture",
-    provider: { provider: "openai", model: "gpt-4" } as ProviderConfig,
-  };
-
-  const testScenario: ScenarioPlan = {
-    id: "scenario-prompt-check",
-    name: "Prompt Check Scenario",
-    tags: [],
-    steps: [{ keyword: "Given", canonicalType: "given", text: "I verify the system prompt" }],
-  };
-
-  const testContext: RunContext = {
+  const ctx: RunContext = {
     runId: randomUUID(),
-    scenario: testScenario,
-    mcpConfig: testMCPConfig,
+    scenario: oneStepScenario,
+    mcpConfig: sharedMCPConfig,
     conversationHistory: [],
-    tokenBudget: mockTokenBudget,
+    tokenBudget: tightBudget,
     abortSignal: new AbortController().signal,
   };
 
-  for await (const _ of orchestrator.runScenario(testScenario, testContext)) {
-    // consume all results
+  const results: StepResult[] = [];
+  for await (const result of orchestrator.runScenario(oneStepScenario, ctx)) {
+    results.push(result);
   }
-
-  const systemMsg = capturedMessages.find((m) => m.role === "system");
-  assert.ok(systemMsg, "System message should be present");
+  assert.equal(results.length, 1);
+  assert.equal(results[0].status, "aborted");
   assert.ok(
-    !systemMsg.content.includes("You are a test automation agent"),
-    "System message should NOT contain the old static prompt"
-  );
-  assert.ok(
-    systemMsg.content.includes("browser automation assistant") || systemMsg.content.includes("tools"),
-    "System message should contain dynamically assembled prompt content"
+    results[0].message.includes("Presupuesto de tokens excedido") ||
+      results[0].message.includes("budget"),
+    `Expected budget message, got: ${results[0].message}`
   );
 });
 

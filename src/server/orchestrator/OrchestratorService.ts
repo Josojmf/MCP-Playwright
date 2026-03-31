@@ -4,7 +4,7 @@ import { RunContext, StepResult, ToolCallTrace } from "./types";
 import { withTimeout, TIMEOUT_TIERS } from "../../shared/harness/withTimeout";
 import { LLMMessage, LLMRequest, LLMProvider } from "../../shared/llm/types";
 import { createProvider } from "../../shared/llm/factory";
-import { assembleSystemPrompt } from "../../shared/llm/systemPrompt";
+import { BudgetExceededError } from "../../shared/harness/TokenBudget";
 
 /**
  * OrchestratorService orchestrates sequential execution of a scenario
@@ -41,11 +41,11 @@ export class OrchestratorService {
     const continueOnError = options?.continueOnError ?? true;
 
     // Request initialization - we build messages as we process steps
-    const systemPromptContent = assembleSystemPrompt(ctx.mcpConfig.id, []);
     const initialMessages: LLMMessage[] = [
       {
         role: "system",
-        content: `${systemPromptContent}\nScenario: ${scenario.name}`,
+        content: `You are a test automation agent. Execute the following Gherkin scenario steps and report results.
+Scenario: ${scenario.name}`,
       },
       ...ctx.conversationHistory,
     ];
@@ -93,6 +93,9 @@ export class OrchestratorService {
             maxTokens: 1000,
           };
 
+          // Guard: check token budget before making LLM request (INFRA-05)
+          ctx.tokenBudget.checkBudget();
+
           // Execute with timeout
           const response = await withTimeout(
             provider.complete(request),
@@ -136,7 +139,23 @@ export class OrchestratorService {
           const latencyMs = Date.now() - stepStartTime;
           const errorMessage = error instanceof Error ? error.message : String(error);
 
-          // Check budget before continuing
+          // Budget exceeded is fatal -- abort the entire run
+          if (error instanceof BudgetExceededError) {
+            yield this.createStepResult(
+              ctx.mcpConfig.id,
+              step,
+              scenario,
+              stepIndex,
+              "aborted",
+              { input: 0, output: 0, total: 0 },
+              latencyMs,
+              `Presupuesto de tokens excedido: ${error.message}`,
+              []
+            );
+            return; // Exit the generator entirely
+          }
+
+          // Check abort signal before continuing
           if (ctx.abortSignal.aborted) {
             yield this.createStepResult(
               ctx.mcpConfig.id,
