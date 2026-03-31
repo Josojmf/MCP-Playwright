@@ -18,6 +18,10 @@
 | 4 | Parallel Execution Across Multiple MCPs | All registered MCPs run simultaneously, side-by-side comparison UI, cloud MCP support | 5 | Completed |
 | 5 | Screenshot Validation & Scorecard | Full hallucination detection, tiered vision validation, complete scorecard UI, cost dashboard | 10 | Completed |
 | 6 | CLI & Export | CI-ready headless CLI, debug mode, run history export, mcp-playwright community server | 5 | Completed |
+| 7 | Wire Dead Modules into Execution Path | Connect fully-implemented but unwired Phase 2/3 modules into production call path | 5 | Pending |
+| 8 | Real MCP Process Protocol & Integration Fixes | Replace stub MCP process with real JSON-RPC stdio communication; fix loop detection and pricing | 4 | Pending |
+| 9 | Real Vision LLM Validation | Implement async LLM API call in vision validator; back hallucination detection with real model verdicts | 6 | Pending |
+| 10 | CLI Debug Trace & CSV Scorecard | Fix debug tool-call trace output and CSV per-MCP scorecard format | 2 | Pending |
 
 ---
 
@@ -29,6 +33,10 @@
 - [x] **Phase 4: Parallel Execution Across Multiple MCPs** — Concurrent multi-MCP runs, side-by-side UI, cloud MCPs
 - [x] **Phase 5: Screenshot Validation & Scorecard** — Hallucination detection, tiered vision validation, full scorecard
 - [x] **Phase 6: CLI & Export** — Headless CLI runner, debug mode, JSON/CSV export
+- [ ] **Phase 7: Wire Dead Modules into Execution Path** — assembleSystemPrompt, InstrumentedMcpClient, assertionsRunner, stalenessRecovery, TokenBudget wired in
+- [ ] **Phase 8: Real MCP Process Protocol & Integration Fixes** — Real MCP stdio JSON-RPC, real CLI provider, loop detection fix, pricing fix
+- [ ] **Phase 9: Real Vision LLM Validation** — Real async vision LLM call, hallucination detection, NEEDS_REVIEW from real confidence
+- [ ] **Phase 10: CLI Debug Trace & CSV Scorecard** — Tool call trace in debug mode, per-MCP CSV scorecard format
 
 ---
 
@@ -245,6 +253,131 @@
 
 ---
 
+### Phase 7: Wire Dead Modules into Execution Path
+
+**Goal**: All fully-implemented Phase 2/3 modules that exist only as dead code are connected into the live production execution path. No new implementation required — this phase is entirely integration wiring and verification.
+
+**Why Now**: The audit identifies four modules (`assembleSystemPrompt`, `InstrumentedMcpClient`, `assertionsRunner`, `stalenessRecovery`) that are tested in isolation but never called from production code. These are the core anti-hallucination differentiation of this platform. Until they are wired in, screenshots are 1×1 placeholders, Then-step assertions never run, staleness causes step failures, and all MCPs receive an identical generic system prompt.
+
+**Gap Closure:** Closes gaps from v1.0 audit
+
+**Depends on**: Phases 1–6 (all modules already implemented)
+
+**Requirements**: ORCH-09, VALID-01, VALID-02, EXEC-05, INFRA-05
+
+**Plans**:
+1. Wire `assembleSystemPrompt(mcpId, tools)` into `OrchestratorService` — replace static inline system prompt string with call to `assembleSystemPrompt` from `src/shared/llm/systemPrompt.ts` (ORCH-09)
+2. Instantiate `InstrumentedMcpClient` in `OrchestratorService` — wrap MCP tool calls through `InstrumentedMcpClient`; verify screenshots are captured and stored per step (VALID-01)
+3. Call `runAssertion()` for `Then` steps — consume `ParsedStep.assertion` in orchestrator step loop; invoke `assertionsRunner.runAssertion()` after each Then step; propagate result to step status (VALID-02)
+4. Import and call `retryWithNewSnapshot()` on stale-ref errors — detect stale-ref error class in execution path; call `stalenessRecovery.retryWithNewSnapshot()`; do not count as benchmark failure (EXEC-05)
+5. Call `TokenBudget.checkBudget()` before each LLM request — guard every `provider.complete()` / `provider.stream()` call in `OrchestratorService` with a budget check; abort run if cap would be exceeded (INFRA-05)
+
+**Success Criteria**:
+1. A run for `@playwright/mcp` uses a system prompt containing `browser_*` tool names, not the static generic prompt.
+2. A screenshot blob is present in SQLite for every MCP tool call in a completed run (not a 1×1 placeholder).
+3. A `Then` step whose Playwright assertion fails is marked `failed` in the run results — independently of what the MCP reported.
+4. Triggering a stale ARIA ref results in a retry attempt logged in the server output; the step reflects the retry outcome, not the stale-ref error.
+5. `TokenBudget.checkBudget()` is called before each LLM request; a run configured below the token estimate is blocked before the first LLM call.
+
+**UAT Checklist**:
+- [ ] Run a scenario against `@playwright/mcp`; inspect server log for the assembled system prompt; verify it contains `browser_*` tool names from the registry
+- [ ] Complete a run; query SQLite screenshots table; verify all rows contain non-placeholder image data (file size > 100 bytes)
+- [ ] Write a `Then` step with a wrong expected URL; run it; verify step is marked `failed` even though MCP did not error
+- [ ] Set token cap below run estimate; attempt to start run; verify it is blocked with a budget message before any steps execute
+
+---
+
+### Phase 8: Real MCP Process Protocol & Integration Fixes
+
+**Goal**: The stub MCP process (`node -e 'setInterval()'`) is replaced with real MCP JSON-RPC stdio communication using `@modelcontextprotocol/sdk`. The CLI uses a real LLM provider. Loop detection uses actual tool call fingerprints. Cost estimation uses the live pricing table.
+
+**Why Now**: Phase 7 wires dead modules, but the orchestrator still routes LLM responses as step results with no actual browser actions. This phase makes the execution engine real. It also closes correctness tech-debt in loop detection and pricing that affects result accuracy.
+
+**Gap Closure:** Closes gaps from v1.0 audit
+
+**Depends on**: Phase 7 (execution path wired before replacing the process)
+
+**Requirements**: EXEC-03, CLI-01, INFRA-04, ORCH-07
+
+**Plans**:
+1. Implement real MCP stdio protocol in `McpProcessManager` — replace stub keep-alive with `@modelcontextprotocol/sdk` stdio transport; implement `initialize` handshake, `tools/list`, `tools/call`; health-check via capability negotiation; cleanup on completion and crash (EXEC-03)
+2. Replace mock CLI provider — remove `createCliProvider()` mock from `mcp-bench.ts`; call `createProvider(config)` factory with config loaded from env/file; verify real LLM responses flow through CLI path (CLI-01)
+3. Fix `LoopDetector` fingerprinting — change fingerprint input from Gherkin step text to MCP tool name + serialized arguments; update call sites in `OrchestratorService` (INFRA-04)
+4. Fix `runManager.estimateRun()` pricing — replace hardcoded `$1.5/$6 per 1M` with call to `adapter.estimateCost()` using the live pricing table or OpenRouter cache (ORCH-07)
+
+**Success Criteria**:
+1. Running a Gherkin scenario with `@playwright/mcp` selected causes actual browser actions to execute (navigations visible in a headed browser or in Playwright trace).
+2. `npx mcp-bench run` with a valid config invokes the real LLM adapter; the JSON output contains non-synthetic step results.
+3. A loop of identical tool calls (same tool name + args repeated N times) triggers `LoopDetector` abort; a loop of varying Gherkin steps with the same tool call does not escape detection.
+4. `runManager.estimateRun()` returns a cost figure derived from the adapter's pricing table, not the hardcoded flat rate.
+
+**UAT Checklist**:
+- [ ] Run a 2-step Gherkin scenario against `@playwright/mcp` in headed mode; verify the browser window opens and navigates
+- [ ] Run `npx mcp-bench run` from CLI with a real OpenRouter API key; verify JSON output contains real LLM-generated step results
+- [ ] Inspect server logs for MCP capability negotiation messages on run start
+- [ ] Trigger the same tool call 5+ times; verify `LoopDetector` aborts the run before step 10
+
+---
+
+### Phase 9: Real Vision LLM Validation
+
+**Goal**: `validateStepWithVision()` makes a real async LLM API call with the captured screenshot as image payload. Hallucination detection, `NEEDS_REVIEW` flags, and tiered escalation are all backed by real vision model verdicts, not heuristics. Browserbase orphaned-session sweep added.
+
+**Why Now**: Phase 7 wires `InstrumentedMcpClient` so real screenshots exist. Phase 8 makes the MCP process real. This phase completes the anti-hallucination pipeline by making the vision validator call a real LLM.
+
+**Gap Closure:** Closes gaps from v1.0 audit
+
+**Depends on**: Phase 7 (real screenshots captured), Phase 8 (real execution baseline)
+
+**Requirements**: VALID-07, VALID-03, VALID-04, VALID-05, VALID-06, EXEC-07
+
+**Plans**:
+1. Implement real vision LLM call in `validateStepWithVision()` — add `imageBuffer: Buffer` parameter; construct multimodal `LLMMessage` with `ContentPart[]`; call `provider.complete()` with `temperature: 0` and `response_format: json_object`; return structured verdict (VALID-07, VALID-03)
+2. Wire hallucination and `NEEDS_REVIEW` logic to real verdicts — update `StepValidation` model to store vision LLM response fields; assert hallucination only when Playwright passed + `contradicts` + `confidence > 0.7`; flag `NEEDS_REVIEW` when `confidence < 0.4` (VALID-04, VALID-05)
+3. Add auditor model uniqueness check + Browserbase startup sweep — validate at run-start that auditor model key ≠ orchestration model key; add startup sweep for orphaned Browserbase sessions in `McpProcessManager.initialize()` (VALID-06, EXEC-07)
+
+**Success Criteria**:
+1. `validateStepWithVision()` makes an outbound HTTP request to the vision LLM API (visible in network trace or server log) with a base64-encoded image payload.
+2. A step where the screenshot shows the page did not change is flagged `hallucinated: true`; a matching screenshot is flagged `passed`.
+3. The `auditorModel` field in `StepValidation` records is never equal to the run's `orchestratorModel` field.
+4. A low-confidence vision result appears as `NEEDS_REVIEW` in the scorecard and is NOT in the hallucinated list.
+5. No orphaned Browserbase sessions remain after a run that throws mid-execution.
+
+**UAT Checklist**:
+- [ ] Run a scenario; check server logs for outbound vision LLM API calls with image payloads
+- [ ] Inspect a `StepValidation` SQLite record; verify `verdict`, `confidence`, `auditorModel` fields are populated from a real LLM response
+- [ ] Set orchestration model = vision model in config; verify run-start validation blocks with a clear error
+- [ ] Identify a step with low confidence in the scorecard; verify it shows `NEEDS_REVIEW` badge, not `hallucinated`
+
+---
+
+### Phase 10: CLI Debug Trace & CSV Scorecard
+
+**Goal**: `mcp-bench debug` prints the full per-step tool call trace (tool name, arguments, response, latency). CSV export produces one row per MCP with scorecard columns. Both confirmed gaps from Phase 06 VERIFICATION.md (score 2/5).
+
+**Why Now**: These are small, independent fixes to the CLI and export layer. All required data already exists in the data model — this is purely a rendering/formatting fix.
+
+**Gap Closure:** Closes gaps from v1.0 audit
+
+**Depends on**: Phase 6 (CLI and export layer already implemented)
+
+**Requirements**: CLI-03, HIST-02
+
+**Plans**:
+1. Fix `runDebug()` tool call trace — iterate `step.toolCalls` array; print tool name, arguments (formatted JSON), response snippet, and latency per call; highlight hallucinated/needs-review steps with terminal color (CLI-03)
+2. Fix `buildSummaryCsv()` scorecard format — change from per-step or per-run rows to one row per MCP; add columns: `passRate`, `hallucinationCount`, `totalTokens`, `totalCostUsd`; verify importable into Excel/Google Sheets without errors (HIST-02)
+
+**Success Criteria**:
+1. `mcp-bench debug --mcp playwright` prints tool name, arguments, response, and latency for every tool call in a stored run.
+2. `buildSummaryCsv()` produces a file with one row per MCP and the four scorecard columns present and populated.
+3. The CSV opens in Excel/Google Sheets without parse errors.
+
+**UAT Checklist**:
+- [ ] Complete a run with 3+ steps; run `mcp-bench debug --mcp playwright`; verify tool name, args, response, and latency appear for each tool call
+- [ ] Export a run as CSV; open in a spreadsheet; verify one row per MCP with `passRate`, `hallucinationCount`, `totalTokens`, `totalCostUsd` columns
+
+---
+
 ## Progress Table
 
 | Phase | Plans Complete | Status | Completed |
@@ -255,6 +388,10 @@
 | 4. Parallel Execution Across Multiple MCPs | 3/3 | Completed | 2026-03-30 |
 | 5. Screenshot Validation & Scorecard | 4/4 | Completed | 2026-03-30 |
 | 6. CLI & Export | 3/3 | Completed | 2026-03-30 |
+| 7. Wire Dead Modules into Execution Path | 0/5 | Pending | — |
+| 8. Real MCP Process Protocol & Integration Fixes | 0/4 | Pending | — |
+| 9. Real Vision LLM Validation | 0/3 | Pending | — |
+| 10. CLI Debug Trace & CSV Scorecard | 0/2 | Pending | — |
 
 ---
 
@@ -265,24 +402,24 @@
 | INFRA-01 | Phase 1 | Completed |
 | INFRA-02 | Phase 1 | Completed |
 | INFRA-03 | Phase 1 | Completed |
-| INFRA-04 | Phase 1 | Completed |
-| INFRA-05 | Phase 1 | Completed |
+| INFRA-04 | Phase 8 | Pending |
+| INFRA-05 | Phase 7 | Pending |
 | INFRA-06 | Phase 1 | Completed |
 | INFRA-07 | Phase 5 | Completed |
 | GHERKIN-01 | Phase 1 | Completed |
 | GHERKIN-02 | Phase 1 | Completed |
 | GHERKIN-03 | Phase 1 | Completed |
 | GHERKIN-04 | Phase 1 | Completed |
-| GHERKIN-05 | Phase 2 | Completed |
+| GHERKIN-05 | Phase 7 | Pending |
 | ORCH-01 | Phase 2 | Completed |
 | ORCH-02 | Phase 2 | Completed |
 | ORCH-03 | Phase 2 | Completed |
 | ORCH-04 | Phase 2 | Completed |
 | ORCH-05 | Phase 2 | Completed |
 | ORCH-06 | Phase 2 | Completed |
-| ORCH-07 | Phase 2 | Completed |
+| ORCH-07 | Phase 8 | Pending |
 | ORCH-08 | Phase 3 | Completed |
-| ORCH-09 | Phase 2 | Completed |
+| ORCH-09 | Phase 7 | Pending |
 | REGISTRY-01 | Phase 2 | Completed |
 | REGISTRY-02 | Phase 2 | Completed |
 | REGISTRY-03 | Phase 2 | Completed |
@@ -291,18 +428,18 @@
 | REGISTRY-06 | Phase 2 | Completed |
 | EXEC-01 | Phase 3 | Completed |
 | EXEC-02 | Phase 4 | Completed |
-| EXEC-03 | Phase 3 | Completed |
+| EXEC-03 | Phase 8 | Pending |
 | EXEC-04 | Phase 3 | Completed |
-| EXEC-05 | Phase 3 | Completed |
+| EXEC-05 | Phase 7 | Pending |
 | EXEC-06 | Phase 4 | Completed |
-| EXEC-07 | Phase 4 | Completed |
-| VALID-01 | Phase 3 | Completed |
-| VALID-02 | Phase 3 | Completed |
-| VALID-03 | Phase 5 | Completed |
-| VALID-04 | Phase 5 | Completed |
-| VALID-05 | Phase 5 | Completed |
-| VALID-06 | Phase 5 | Completed |
-| VALID-07 | Phase 5 | Completed |
+| EXEC-07 | Phase 9 | Pending |
+| VALID-01 | Phase 7 | Pending |
+| VALID-02 | Phase 7 | Pending |
+| VALID-03 | Phase 9 | Pending |
+| VALID-04 | Phase 9 | Pending |
+| VALID-05 | Phase 9 | Pending |
+| VALID-06 | Phase 9 | Pending |
+| VALID-07 | Phase 9 | Pending |
 | UI-01 | Phase 1 | Completed |
 | UI-02 | Phase 1 | Completed |
 | UI-03 | Phase 3 | Completed |
@@ -312,11 +449,11 @@
 | UI-07 | Phase 5 | Completed |
 | UI-08 | Phase 1 | Completed |
 | UI-09 | Phase 1 | Completed |
-| CLI-01 | Phase 6 | Completed |
+| CLI-01 | Phase 8 | Pending |
 | CLI-02 | Phase 6 | Completed |
-| CLI-03 | Phase 6 | Completed |
+| CLI-03 | Phase 10 | Pending |
 | HIST-01 | Phase 3 | Completed |
-| HIST-02 | Phase 6 | Completed |
+| HIST-02 | Phase 10 | Pending |
 | HIST-03 | Phase 3 | Completed |
 
 **Coverage: 54/54 v1 requirements mapped — no orphans.**
@@ -324,5 +461,5 @@
 ---
 
 *Roadmap created: 2026-03-30*
-*Last updated: 2026-03-30 after Phase 6 completion*
+*Last updated: 2026-03-31 after gap closure phases 7–10 added*
 

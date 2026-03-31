@@ -131,24 +131,24 @@
 | INFRA-01 | Phase 1 | Pending |
 | INFRA-02 | Phase 1 | Pending |
 | INFRA-03 | Phase 1 | Pending |
-| INFRA-04 | Phase 1 | Pending |
-| INFRA-05 | Phase 1 | Pending |
+| INFRA-04 | Phase 8 | Pending |
+| INFRA-05 | Phase 7 | Pending |
 | INFRA-06 | Phase 1 | Pending |
 | INFRA-07 | Phase 5 | Pending |
 | GHERKIN-01 | Phase 1 | Pending |
 | GHERKIN-02 | Phase 1 | Pending |
 | GHERKIN-03 | Phase 1 | Pending |
 | GHERKIN-04 | Phase 1 | Pending |
-| GHERKIN-05 | Phase 2 | Pending |
+| GHERKIN-05 | Phase 7 | Pending |
 | ORCH-01 | Phase 2 | Pending |
 | ORCH-02 | Phase 2 | Pending |
 | ORCH-03 | Phase 2 | Pending |
 | ORCH-04 | Phase 2 | Pending |
 | ORCH-05 | Phase 2 | Pending |
 | ORCH-06 | Phase 2 | Pending |
-| ORCH-07 | Phase 2 | Pending |
+| ORCH-07 | Phase 8 | Pending |
 | ORCH-08 | Phase 3 | Pending |
-| ORCH-09 | Phase 2 | Pending |
+| ORCH-09 | Phase 7 | Pending |
 | REGISTRY-01 | Phase 2 | Pending |
 | REGISTRY-02 | Phase 2 | Pending |
 | REGISTRY-03 | Phase 2 | Pending |
@@ -157,18 +157,18 @@
 | REGISTRY-06 | Phase 2 | Pending |
 | EXEC-01 | Phase 3 | Pending |
 | EXEC-02 | Phase 4 | Pending |
-| EXEC-03 | Phase 3 | Pending |
+| EXEC-03 | Phase 8 | Pending |
 | EXEC-04 | Phase 3 | Pending |
-| EXEC-05 | Phase 3 | Pending |
+| EXEC-05 | Phase 7 | Pending |
 | EXEC-06 | Phase 4 | Pending |
-| EXEC-07 | Phase 4 | Pending |
-| VALID-01 | Phase 3 | Pending |
-| VALID-02 | Phase 3 | Pending |
-| VALID-03 | Phase 5 | Pending |
-| VALID-04 | Phase 5 | Pending |
-| VALID-05 | Phase 5 | Pending |
-| VALID-06 | Phase 5 | Pending |
-| VALID-07 | Phase 5 | Pending |
+| EXEC-07 | Phase 9 | Pending |
+| VALID-01 | Phase 7 | Pending |
+| VALID-02 | Phase 7 | Pending |
+| VALID-03 | Phase 9 | Pending |
+| VALID-04 | Phase 9 | Pending |
+| VALID-05 | Phase 9 | Pending |
+| VALID-06 | Phase 9 | Pending |
+| VALID-07 | Phase 9 | Pending |
 | UI-01 | Phase 1 | Pending |
 | UI-02 | Phase 1 | Pending |
 | UI-03 | Phase 3 | Pending |
@@ -178,11 +178,11 @@
 | UI-07 | Phase 5 | Pending |
 | UI-08 | Phase 1 | Pending |
 | UI-09 | Phase 1 | Pending |
-| CLI-01 | Phase 6 | Pending |
+| CLI-01 | Phase 8 | Pending |
 | CLI-02 | Phase 6 | Pending |
-| CLI-03 | Phase 6 | Pending |
+| CLI-03 | Phase 10 | Pending |
 | HIST-01 | Phase 3 | Pending |
-| HIST-02 | Phase 6 | Pending |
+| HIST-02 | Phase 10 | Pending |
 | HIST-03 | Phase 3 | Pending |
 
 **Coverage:**
@@ -192,4 +192,4 @@
 
 ---
 *Requirements defined: 2026-03-30*
-*Last updated: 2026-03-30 after initial definition*
+*Last updated: 2026-03-31 after gap closure phases 7–10 added; traceability reassigned for 17 requirements*
