@@ -18,7 +18,7 @@
 | 4 | Parallel Execution Across Multiple MCPs | All registered MCPs run simultaneously, side-by-side comparison UI, cloud MCP support | 5 | Completed |
 | 5 | Screenshot Validation & Scorecard | Full hallucination detection, tiered vision validation, complete scorecard UI, cost dashboard | 10 | Completed |
 | 6 | CLI & Export | CI-ready headless CLI, debug mode, run history export, mcp-playwright community server | 5 | Completed |
-| 7 | Wire Dead Modules into Execution Path | 4/5 | In Progress|  |
+| 7 | Wire Dead Modules into Execution Path | 5/5 | Complete   | 2026-03-31 |
 | 8 | Real MCP Process Protocol & Integration Fixes | Replace stub MCP process with real JSON-RPC stdio communication; fix loop detection and pricing | 4 | Pending |
 | 9 | Real Vision LLM Validation | Implement async LLM API call in vision validator; back hallucination detection with real model verdicts | 6 | Pending |
 | 10 | CLI Debug Trace & CSV Scorecard | Fix debug tool-call trace output and CSV per-MCP scorecard format | 2 | Pending |
@@ -33,7 +33,7 @@
 - [x] **Phase 4: Parallel Execution Across Multiple MCPs** — Concurrent multi-MCP runs, side-by-side UI, cloud MCPs
 - [x] **Phase 5: Screenshot Validation & Scorecard** — Hallucination detection, tiered vision validation, full scorecard
 - [x] **Phase 6: CLI & Export** — Headless CLI runner, debug mode, JSON/CSV export
-- [ ] **Phase 7: Wire Dead Modules into Execution Path** — assembleSystemPrompt, InstrumentedMcpClient, assertionsRunner, stalenessRecovery, TokenBudget wired in
+- [x] **Phase 7: Wire Dead Modules into Execution Path** — assembleSystemPrompt, InstrumentedMcpClient, assertionsRunner, stalenessRecovery, TokenBudget wired in (completed 2026-03-31)
 - [ ] **Phase 8: Real MCP Process Protocol & Integration Fixes** — Real MCP stdio JSON-RPC, real CLI provider, loop detection fix, pricing fix
 - [ ] **Phase 9: Real Vision LLM Validation** — Real async vision LLM call, hallucination detection, NEEDS_REVIEW from real confidence
 - [ ] **Phase 10: CLI Debug Trace & CSV Scorecard** — Tool call trace in debug mode, per-MCP CSV scorecard format

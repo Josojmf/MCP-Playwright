@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Executing Phase 07
-last_updated: "2026-03-31T18:38:41.481Z"
+last_updated: "2026-03-31T18:54:52.494Z"
 progress:
   total_phases: 10
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 9
-  completed_plans: 16
+  completed_plans: 17
 ---
 
 # Project State
@@ -44,6 +44,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 - checkBudget() placed before withTimeout(provider.complete()) to block LLM call before any network cost (07-05).
 - [Phase 07]: VALID-02: runAssertion() called on Then steps after LLM success; assertion failure overrides step status to 'failed' independently of MCP report
 - [Phase 07-02]: InstrumentedMcpClient wired with stub BaseMcpClient in executeMcpRun; Phase 8 replaces stub with real protocol client for real screenshot capture
+- [Phase 07-04]: Stale-ref errors annotate step message with [STALE-REF] prefix and skip benchmark failure counting; run-level catch also traces stale-ref via traceStaleRefRecovery()
 
 ## Metrics
 
@@ -54,7 +55,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 
 ## Next Action
 
-Continue Phase 07 plan execution (07-05 complete, INFRA-05 wired). Next: remaining 07 plans.
+Continue Phase 07 plan execution. Plans 01, 02, 03, 04, 05 complete. Next: remaining 07 plans.
 
 ---
 *Updated: 2026-03-30 after completing phases 3-6*
