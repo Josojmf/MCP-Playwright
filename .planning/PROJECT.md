@@ -12,7 +12,11 @@ Honest, reproducible comparison of MCP tool quality for E2E browser automation �
 
 ### Validated
 
-(None yet — ship to validate)
+- Provider-agnostic LLM orchestrator with system prompt assembly (Validated in Phase 07: wire-dead-modules)
+- Token budget enforcement with hard cap and warn threshold (Validated in Phase 07: wire-dead-modules)
+- Dual-layer step validation: runAssertion() wired for Then steps — assertion failures override LLM-reported pass (Validated in Phase 07: wire-dead-modules)
+- InstrumentedMcpClient screenshot pipeline wired into executeMcpRun() (Validated in Phase 07: wire-dead-modules)
+- Stale ARIA ref detection and tracing in benchmark execution path (Validated in Phase 07: wire-dead-modules)
 
 ### Active
 
@@ -103,4 +107,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-30 after initialization*
+*Last updated: 2026-03-31 after Phase 07 completion — wire-dead-modules complete*
