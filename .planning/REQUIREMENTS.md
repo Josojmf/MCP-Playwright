@@ -33,7 +33,7 @@
 - [ ] **ORCH-06**: `createProvider(config)` factory — provider swapped via config key only, no code changes required
 - [ ] **ORCH-07**: Pricing table (`inputPer1MTokens`, `outputPer1MTokens` per model) with OpenRouter `/api/v1/models` cache fetched at startup
 - [ ] **ORCH-08**: Stateful conversation history maintained across all steps in a scenario run (prior turns kept for LLM context)
-- [ ] **ORCH-09**: System prompt dynamically assembled per MCP server using tool namespace declared in registry entry
+- [x] **ORCH-09**: System prompt dynamically assembled per MCP server using tool namespace declared in registry entry
 
 ### MCP Registry
 
@@ -148,7 +148,7 @@
 | ORCH-06 | Phase 2 | Pending |
 | ORCH-07 | Phase 8 | Pending |
 | ORCH-08 | Phase 3 | Pending |
-| ORCH-09 | Phase 7 | Pending |
+| ORCH-09 | Phase 7 | Complete |
 | REGISTRY-01 | Phase 2 | Pending |
 | REGISTRY-02 | Phase 2 | Pending |
 | REGISTRY-03 | Phase 2 | Pending |
