@@ -13,6 +13,7 @@ import { McpProcessManager } from "./mcp/McpProcessManager";
 import { preflight } from "./mcp/preflight";
 import { saveScreenshot as saveFileScreenshot } from "./storage/screenshots";
 import { validateStepWithVision, type StepValidation } from "./validation/visionValidator";
+import { InstrumentedMcpClient, type BaseMcpClient } from "./mcp/InstrumentedMcpClient";
 
 export interface RunEstimateRequest {
   baseUrl: string;
@@ -84,6 +85,11 @@ interface RunSession {
 
 const RUN_RETENTION_MS = 10 * 60 * 1000;
 const SCREENSHOT_DIR = process.env.DATA_DIR ?? ".data";
+const MCP_ID_ALIASES: Record<string, string> = {
+  playwright: "@playwright/mcp",
+  puppeteer: "@modelcontextprotocol/server-puppeteer",
+  browserbase: "@browserbasehq/mcp",
+};
 
 export class RequestValidationError extends Error {
   constructor(message: string) {
@@ -290,8 +296,8 @@ export class PhaseOneRunManager {
         session.status = "aborted";
       } else {
         const allMcpRuns = session.config.selectedMcpIds.map((mcpId) => session.resultsByMcp.get(mcpId) ?? []);
-        const anySteps = allMcpRuns.some((steps) => steps.length > 0);
-        session.status = anySteps ? "completed" : "aborted";
+        const anyPassedStep = allMcpRuns.some((steps) => steps.some((step) => step.status === "passed"));
+        session.status = anyPassedStep ? "completed" : "aborted";
       }
 
       if (session.status === "aborted") {
@@ -332,6 +338,16 @@ export class PhaseOneRunManager {
     const loopDetector = new LoopDetector(3, 20);
     const orchestrator = new OrchestratorService();
     const processManager = new McpProcessManager(mcpId);
+    const providerConfig = this.resolveProviderConfig();
+
+    // Stub MCP client -- Phase 8 replaces with real MCP protocol client
+    const stubMcpClient: BaseMcpClient = {
+      async callTool(name: string, args: Record<string, unknown>) {
+        void args;
+        return { type: 'success' as const, content: [{ type: 'text', text: `Stub: ${name}` }] };
+      },
+    };
+    const instrumentedClient = new InstrumentedMcpClient(stubMcpClient);
 
     try {
       this.emit(session, "mcp_ready", {
@@ -369,10 +385,7 @@ export class PhaseOneRunManager {
 
         const mcpConfig: MCPConfig = {
           id: mcpId,
-          provider: {
-            provider: "openai",
-            model: "gpt-4",
-          },
+          provider: providerConfig,
         };
 
         const runContext: RunContext = {
@@ -391,6 +404,11 @@ export class PhaseOneRunManager {
             argsString: stepResult.stepText,
           });
           await this.trackStepResult(session, mcpId, stepResult, scenario.steps.length, mcpConfig.provider.model ?? "gpt-4");
+
+          // Collect instrumented traces for this step (connects InstrumentedMcpClient pipeline)
+          const instrumentedTraces = instrumentedClient.getTraces();
+          // Traces will contain real screenshot data when Phase 8 provides a real BaseMcpClient
+          this.logger.info({ mcpId, tracesCount: instrumentedTraces.length }, "InstrumentedMcpClient wired");
         }
       }
     } catch (error) {
@@ -402,6 +420,7 @@ export class PhaseOneRunManager {
       });
       this.logger.warn({ runId: session.id, mcpId, err: error }, "MCP run aborted");
     } finally {
+      instrumentedClient.clearTraces();
       await processManager.dispose();
     }
   }
@@ -593,7 +612,7 @@ export class PhaseOneRunManager {
     }
 
     if (!Array.isArray(input.selectedMcpIds) || input.selectedMcpIds.length === 0) {
-      throw new RequestValidationError("Selecciona al menos un MCP.");
+      throw new RequestValidationError("Selecciona al menos un MCP soportado.");
     }
 
     if (!Number.isFinite(input.tokenCap) || input.tokenCap < 500) {
@@ -604,7 +623,7 @@ export class PhaseOneRunManager {
   private normalizeInput(input: RunEstimateRequest): RunEstimateRequest {
     const baseUrl = this.normalizeBaseUrl(input.baseUrl ?? "");
     const featureText = this.normalizeFeatureText(input.featureText ?? "");
-    const selectedMcpIds = Array.isArray(input.selectedMcpIds) ? input.selectedMcpIds.filter(Boolean) : [];
+    const selectedMcpIds = this.normalizeSelectedMcpIds(input.selectedMcpIds ?? []);
 
     return {
       ...input,
@@ -612,6 +631,93 @@ export class PhaseOneRunManager {
       featureText,
       selectedMcpIds,
     };
+  }
+
+  private normalizeSelectedMcpIds(selectedMcpIds: string[]): string[] {
+    if (!Array.isArray(selectedMcpIds)) {
+      return [];
+    }
+
+    const normalized = selectedMcpIds
+      .map((id) => this.normalizeMcpId(id))
+      .filter((id): id is string => Boolean(id && MCP_REGISTRY[id]));
+
+    return [...new Set(normalized)];
+  }
+
+  private normalizeMcpId(rawMcpId: string): string | null {
+    if (!rawMcpId) {
+      return null;
+    }
+
+    const trimmed = rawMcpId.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    if (MCP_REGISTRY[trimmed]) {
+      return trimmed;
+    }
+
+    const alias = MCP_ID_ALIASES[trimmed.toLowerCase()];
+    if (alias && MCP_REGISTRY[alias]) {
+      return alias;
+    }
+
+    return null;
+  }
+
+  private resolveProviderConfig(): MCPConfig["provider"] {
+    const valueFromEnv = (...keys: string[]): string | undefined => {
+      for (const key of keys) {
+        const value = process.env[key];
+        if (value && value.trim()) {
+          return value.trim();
+        }
+      }
+      return undefined;
+    };
+
+    const openAiKey = valueFromEnv("OPENAI_API_KEY");
+    if (openAiKey) {
+      return {
+        provider: "openai",
+        model: valueFromEnv("OPENAI_MODEL") ?? "gpt-4o-mini",
+      };
+    }
+
+    const openRouterKey = valueFromEnv("OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY");
+    if (openRouterKey) {
+      return {
+        provider: "openrouter",
+        model: valueFromEnv("OPENROUTER_MODEL", "OPEN_ROUTER_MODEL") ?? "openai/gpt-4o-mini",
+      };
+    }
+
+    const claudeKey = valueFromEnv("ANTHROPIC_API_KEY");
+    if (claudeKey) {
+      return {
+        provider: "claude",
+        model: valueFromEnv("ANTHROPIC_MODEL") ?? "claude-3-5-sonnet-latest",
+      };
+    }
+
+    const azureKey = valueFromEnv("AZURE_OPENAI_API_KEY");
+    const azureEndpoint = valueFromEnv("AZURE_OPENAI_ENDPOINT");
+    const azureDeployment = valueFromEnv("AZURE_OPENAI_DEPLOYMENT");
+    if (azureKey && azureEndpoint && azureDeployment) {
+      return {
+        provider: "azure",
+        model: valueFromEnv("AZURE_OPENAI_MODEL") ?? azureDeployment,
+        azureEndpoint,
+        azureDeploymentName: azureDeployment,
+        azureApiVersion: valueFromEnv("AZURE_OPENAI_API_VERSION"),
+      };
+    }
+
+    throw new RequestValidationError(
+      "Faltan credenciales LLM. Define OPENAI_API_KEY o OPENROUTER_API_KEY (también soporta ANTHROPIC_API_KEY/Azure OpenAI)."
+    );
   }
 
   private normalizeBaseUrl(baseUrl: string): string {
