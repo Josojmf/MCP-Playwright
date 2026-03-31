@@ -280,6 +280,75 @@ test("runScenario maintains conversation history between steps", async (t) => {
   });
 });
 
+test("runScenario uses assembleSystemPrompt instead of static prompt", async () => {
+  let capturedMessages: import("../../shared/llm/types").LLMMessage[] = [];
+  const capturingProvider: LLMProvider = {
+    async complete(request: LLMRequest): Promise<LLMResponse> {
+      capturedMessages = request.messages;
+      return {
+        id: randomUUID(),
+        model: request.model,
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "Executed step" },
+            finishReason: "stop",
+          },
+        ],
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+      };
+    },
+    async *stream(_request: LLMRequest): AsyncIterable<LLMChunk> {
+      yield { index: 0, delta: "", finishReason: "stop" };
+    },
+    async estimateCost(): Promise<number> {
+      return 0;
+    },
+  };
+
+  const orchestrator = new OrchestratorService(capturingProvider);
+  const mockTokenBudget = new TokenBudget(
+    { hardCapTokens: 10000, warnThresholdRatio: 0.8 },
+    () => {}
+  );
+
+  const testMCPConfig: MCPConfig = {
+    id: "test-mcp-capture",
+    provider: { provider: "openai", model: "gpt-4" } as ProviderConfig,
+  };
+
+  const testScenario: ScenarioPlan = {
+    id: "scenario-prompt-check",
+    name: "Prompt Check Scenario",
+    tags: [],
+    steps: [{ keyword: "Given", canonicalType: "given", text: "I verify the system prompt" }],
+  };
+
+  const testContext: RunContext = {
+    runId: randomUUID(),
+    scenario: testScenario,
+    mcpConfig: testMCPConfig,
+    conversationHistory: [],
+    tokenBudget: mockTokenBudget,
+    abortSignal: new AbortController().signal,
+  };
+
+  for await (const _ of orchestrator.runScenario(testScenario, testContext)) {
+    // consume all results
+  }
+
+  const systemMsg = capturedMessages.find((m) => m.role === "system");
+  assert.ok(systemMsg, "System message should be present");
+  assert.ok(
+    !systemMsg.content.includes("You are a test automation agent"),
+    "System message should NOT contain the old static prompt"
+  );
+  assert.ok(
+    systemMsg.content.includes("browser automation assistant") || systemMsg.content.includes("tools"),
+    "System message should contain dynamically assembled prompt content"
+  );
+});
+
 test("AsyncGenerator behavior", async (t) => {
   const mockProvider = new MockLLMProvider();
   const orchestrator = new OrchestratorService(mockProvider);

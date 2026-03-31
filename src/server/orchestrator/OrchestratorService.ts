@@ -4,6 +4,7 @@ import { RunContext, StepResult, ToolCallTrace } from "./types";
 import { withTimeout, TIMEOUT_TIERS } from "../../shared/harness/withTimeout";
 import { LLMMessage, LLMRequest, LLMProvider } from "../../shared/llm/types";
 import { createProvider } from "../../shared/llm/factory";
+import { assembleSystemPrompt } from "../../shared/llm/systemPrompt";
 
 /**
  * OrchestratorService orchestrates sequential execution of a scenario
@@ -40,11 +41,11 @@ export class OrchestratorService {
     const continueOnError = options?.continueOnError ?? true;
 
     // Request initialization - we build messages as we process steps
+    const systemPromptContent = assembleSystemPrompt(ctx.mcpConfig.id, []);
     const initialMessages: LLMMessage[] = [
       {
         role: "system",
-        content: `You are a test automation agent. Execute the following Gherkin scenario steps and report results.
-Scenario: ${scenario.name}`,
+        content: `${systemPromptContent}\nScenario: ${scenario.name}`,
       },
       ...ctx.conversationHistory,
     ];
