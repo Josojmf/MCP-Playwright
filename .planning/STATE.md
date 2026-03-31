@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase_6_complete
-last_updated: "2026-03-31T10:40:37.253Z"
+status: Executing Phase 07
+last_updated: "2026-03-31T18:38:41.481Z"
 progress:
-  total_phases: 6
+  total_phases: 10
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 12
+  total_plans: 9
+  completed_plans: 15
 ---
 
 # Project State
@@ -18,7 +18,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-03-30)
 
 **Core value:** Honest, reproducible comparison of MCP tool quality for E2E browser automation — exposing which MCPs actually work versus which ones hallucinate.
-**Current focus:** Stabilization and hardening after completing Phase 6.
+**Current focus:** Phase 07 — wire-dead-modules
 
 ## Status
 
@@ -42,6 +42,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 - [Phase 07-wire-dead-modules]: Pass empty tools array [] to assembleSystemPrompt as placeholder; Phase 8 will populate with real MCP tool capabilities
 - BudgetExceededError is fatal in OrchestratorService: generator returns entirely (not continueOnError) when token cap exceeded (07-05).
 - checkBudget() placed before withTimeout(provider.complete()) to block LLM call before any network cost (07-05).
+- [Phase 07]: VALID-02: runAssertion() called on Then steps after LLM success; assertion failure overrides step status to 'failed' independently of MCP report
 
 ## Metrics
 

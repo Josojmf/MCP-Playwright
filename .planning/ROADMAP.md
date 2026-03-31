@@ -18,7 +18,7 @@
 | 4 | Parallel Execution Across Multiple MCPs | All registered MCPs run simultaneously, side-by-side comparison UI, cloud MCP support | 5 | Completed |
 | 5 | Screenshot Validation & Scorecard | Full hallucination detection, tiered vision validation, complete scorecard UI, cost dashboard | 10 | Completed |
 | 6 | CLI & Export | CI-ready headless CLI, debug mode, run history export, mcp-playwright community server | 5 | Completed |
-| 7 | Wire Dead Modules into Execution Path | Connect fully-implemented but unwired Phase 2/3 modules into production call path | 5 | Pending |
+| 7 | Wire Dead Modules into Execution Path | 3/5 | In Progress|  |
 | 8 | Real MCP Process Protocol & Integration Fixes | Replace stub MCP process with real JSON-RPC stdio communication; fix loop detection and pricing | 4 | Pending |
 | 9 | Real Vision LLM Validation | Implement async LLM API call in vision validator; back hallucination detection with real model verdicts | 6 | Pending |
 | 10 | CLI Debug Trace & CSV Scorecard | Fix debug tool-call trace output and CSV per-MCP scorecard format | 2 | Pending |
@@ -403,7 +403,7 @@
 | INFRA-02 | Phase 1 | Completed |
 | INFRA-03 | Phase 1 | Completed |
 | INFRA-04 | Phase 8 | Pending |
-| INFRA-05 | Phase 7 | Pending |
+| INFRA-05 | Phase 7 | Completed |
 | INFRA-06 | Phase 1 | Completed |
 | INFRA-07 | Phase 5 | Completed |
 | GHERKIN-01 | Phase 1 | Completed |
