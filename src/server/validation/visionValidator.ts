@@ -1,3 +1,5 @@
+import { LLMProvider, LLMMessage } from "../../shared/llm/types";
+
 export type VisionVerdict = "matches" | "contradicts" | "uncertain";
 export type VisionTier = "low" | "high";
 
@@ -14,18 +16,18 @@ export interface StepValidation {
 export interface VisionValidationInput {
   stepStatus: "passed" | "failed" | "aborted";
   stepText: string;
-  screenshotAvailable: boolean;
+  imageBuffer: Buffer;
+  provider: LLMProvider;
   orchestratorModel: string;
   lowCostAuditorModel?: string;
   highAccuracyAuditorModel?: string;
 }
 
 /**
- * Deterministic tiered validation with explicit anti-circular constraints:
- * - Auditor model is always different from orchestrator model.
- * - Low tier first, then optional escalation when contradiction confidence is high.
+ * Async vision validation with real LLM calls.
+ * Uses tiered escalation: low-cost model first, high-accuracy on contradiction.
  */
-export function validateStepWithVision(input: VisionValidationInput): StepValidation {
+export async function validateStepWithVision(input: VisionValidationInput): Promise<StepValidation> {
   const lowModel =
     input.lowCostAuditorModel && input.lowCostAuditorModel !== input.orchestratorModel
       ? input.lowCostAuditorModel
@@ -36,18 +38,97 @@ export function validateStepWithVision(input: VisionValidationInput): StepValida
       ? input.highAccuracyAuditorModel
       : "gpt-4.1";
 
-  const lowPass = runLowTierHeuristic(input, lowModel);
+  // Failed/aborted steps get deterministic result without LLM call
+  if (input.stepStatus !== "passed") {
+    return {
+      auditorModel: lowModel,
+      tier: "low",
+      verdict: "contradicts",
+      confidence: 0.95,
+      needsReview: false,
+      hallucinated: false,
+      rationale: "Technical step result indicates failure or abort.",
+    };
+  }
 
+  // Run low-tier evaluation with real LLM
+  const lowPass = await runLowTierLLMEvaluation(input, lowModel);
+
+  // Escalate to high-tier if contradiction and high confidence
   if (lowPass.verdict === "contradicts" && lowPass.confidence > 0.8) {
-    const highPass = runHighTierHeuristic(input, highModel, lowPass);
+    const highPass = await runHighTierLLMEvaluation(input, highModel, lowPass);
     return finalizeValidation(input, highPass);
   }
 
   return finalizeValidation(input, lowPass);
 }
 
-function runLowTierHeuristic(input: VisionValidationInput, auditorModel: string): StepValidation {
-  if (!input.screenshotAvailable) {
+async function runLowTierLLMEvaluation(
+  input: VisionValidationInput,
+  auditorModel: string
+): Promise<StepValidation> {
+  const imageB64 = input.imageBuffer.toString("base64");
+  const imageUrl = `data:image/png;base64,${imageB64}`;
+
+  const userMessage: LLMMessage = {
+    role: "user",
+    content: [
+      {
+        type: "text",
+        text: `Analyze this step execution evidence and determine if it succeeded or failed:
+
+Step Text: "${input.stepText}"
+
+Instructions:
+1. Examine the screenshot carefully.
+2. Determine if the step execution appears to have succeeded (matches) or failed (contradicts).
+3. Rate your confidence from 0 to 1.
+4. Indicate if the result requires human review.
+5. Indicate if this appears to be a hallucination (model output doesn't match reality).
+
+Respond ONLY with valid JSON matching this structure:
+{
+  "verdict": "matches" | "contradicts" | "uncertain",
+  "confidence": <0-1>,
+  "needsReview": <boolean>,
+  "hallucinated": <boolean>,
+  "rationale": "<explanation>"
+}`,
+      },
+      {
+        type: "image_url",
+        image_url: { url: imageUrl },
+      },
+    ],
+  };
+
+  try {
+    const response = await input.provider.complete({
+      model: auditorModel,
+      messages: [userMessage],
+      maxTokens: 500,
+      temperature: 0,
+      responseFormat: { type: "json_object" },
+    });
+
+    const content = response.choices[0]?.message.content;
+    if (!content || typeof content !== "string") {
+      throw new Error("Invalid response from provider");
+    }
+
+    const verdict = JSON.parse(content);
+
+    return {
+      auditorModel,
+      tier: "low",
+      verdict: verdict.verdict ?? "uncertain",
+      confidence: verdict.confidence ?? 0.5,
+      needsReview: verdict.needsReview ?? true,
+      hallucinated: verdict.hallucinated ?? false,
+      rationale: verdict.rationale ?? "Low-tier evaluation performed.",
+    };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
     return {
       auditorModel,
       tier: "low",
@@ -55,75 +136,84 @@ function runLowTierHeuristic(input: VisionValidationInput, auditorModel: string)
       confidence: 0.2,
       needsReview: true,
       hallucinated: false,
-      rationale: "Sin screenshot disponible para validación visual.",
+      rationale: `Vision LLM error: ${errorMsg}`,
     };
   }
-
-  const text = input.stepText.toLowerCase();
-
-  if (input.stepStatus === "failed" || input.stepStatus === "aborted") {
-    return {
-      auditorModel,
-      tier: "low",
-      verdict: "contradicts",
-      confidence: 0.86,
-      needsReview: false,
-      hallucinated: false,
-      rationale: "El resultado técnico del paso indica fallo o aborto.",
-    };
-  }
-
-  if (text.includes("incorrect") || text.includes("invalido") || text.includes("wrong")) {
-    return {
-      auditorModel,
-      tier: "low",
-      verdict: "contradicts",
-      confidence: 0.82,
-      needsReview: false,
-      hallucinated: true,
-      rationale: "Patrón textual de contradicción detectado en el paso.",
-    };
-  }
-
-  if (text.includes("maybe") || text.includes("quiz") || text.includes("possibly")) {
-    return {
-      auditorModel,
-      tier: "low",
-      verdict: "uncertain",
-      confidence: 0.35,
-      needsReview: true,
-      hallucinated: false,
-      rationale: "Evidencia ambigua detectada; requiere revisión humana.",
-    };
-  }
-
-  return {
-    auditorModel,
-    tier: "low",
-    verdict: "matches",
-    confidence: 0.72,
-    needsReview: false,
-    hallucinated: false,
-    rationale: "El estado visual es consistente con el resultado técnico del paso.",
-  };
 }
 
-function runHighTierHeuristic(
+async function runHighTierLLMEvaluation(
   input: VisionValidationInput,
   auditorModel: string,
   lowPass: StepValidation
-): StepValidation {
-  const confidence = Math.min(0.98, lowPass.confidence + 0.07);
+): Promise<StepValidation> {
+  const imageB64 = input.imageBuffer.toString("base64");
+  const imageUrl = `data:image/png;base64,${imageB64}`;
 
-  return {
-    auditorModel,
-    tier: "high",
-    verdict: lowPass.verdict,
-    confidence,
-    needsReview: false,
-    hallucinated: input.stepStatus === "passed" && lowPass.verdict === "contradicts" && confidence > 0.7,
-    rationale: "Escalado a modelo de mayor precisión por contradicción de alta confianza.",
+  const userMessage: LLMMessage = {
+    role: "user",
+    content: [
+      {
+        type: "text",
+        text: `Re-analyze this step execution with high accuracy:
+
+Step Text: "${input.stepText}"
+
+Previous assessment indicates a contradiction with high confidence. 
+Confirm or revise the verdict.
+
+Respond ONLY with valid JSON:
+{
+  "verdict": "matches" | "contradicts" | "uncertain",
+  "confidence": <0-1>,
+  "needsReview": <boolean>,
+  "hallucinated": <boolean>,
+  "rationale": "<explanation>"
+}`,
+      },
+      {
+        type: "image_url",
+        image_url: { url: imageUrl },
+      },
+    ],
   };
+
+  try {
+    const response = await input.provider.complete({
+      model: auditorModel,
+      messages: [userMessage],
+      maxTokens: 500,
+      temperature: 0,
+      responseFormat: { type: "json_object" },
+    });
+
+    const content = response.choices[0]?.message.content;
+    if (!content || typeof content !== "string") {
+      throw new Error("Invalid response from provider");
+    }
+
+    const verdict = JSON.parse(content);
+
+    return {
+      auditorModel,
+      tier: "high",
+      verdict: verdict.verdict ?? lowPass.verdict,
+      confidence: Math.min(0.98, verdict.confidence ?? lowPass.confidence + 0.05),
+      needsReview: verdict.needsReview ?? false,
+      hallucinated: verdict.hallucinated ?? false,
+      rationale: verdict.rationale ?? "Escalated to high-tier evaluation.",
+    };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return {
+      auditorModel,
+      tier: "high",
+      verdict: lowPass.verdict,
+      confidence: lowPass.confidence,
+      needsReview: true,
+      hallucinated: false,
+      rationale: `High-tier escalation error: ${errorMsg}`,
+    };
+  }
 }
 
 function finalizeValidation(input: VisionValidationInput, validation: StepValidation): StepValidation {
