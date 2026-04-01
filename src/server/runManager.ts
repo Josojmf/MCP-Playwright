@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
+import { readFile } from "node:fs/promises";
 import { FastifyBaseLogger } from "fastify";
 import { GherkinParserService, ScenarioPlan } from "./parser";
 import { BudgetExceededError, TokenBudget } from "../shared/harness/TokenBudget";
@@ -12,10 +13,11 @@ import { MCP_REGISTRY } from "../shared/registry";
 import { McpProcessManager } from "./mcp/McpProcessManager";
 import { preflight } from "./mcp/preflight";
 import { saveScreenshot as saveFileScreenshot } from "./storage/screenshots";
-import { type StepValidation } from "./validation/visionValidator";
+import { validateStepWithVision, type StepValidation } from "./validation/visionValidator";
 import { InstrumentedMcpClient } from "./mcp/InstrumentedMcpClient";
 import { isStaleRefError, traceStaleRefRecovery } from "./mcp/stalenessRecovery";
 import { resolvePricing, estimateCostUsd } from "../shared/pricing/resolver";
+import { createProvider } from "../shared/llm/factory";
 
 export interface RunEstimateRequest {
   baseUrl: string;
@@ -51,6 +53,7 @@ interface RunConfig {
   tokenCap: number;
   orchestratorModel?: string;
   auditorModel?: string;
+  providerType?: "openai" | "claude" | "azure" | "openrouter"; // LLM provider for orchestrator
 }
 
 type RunStatus = "pending" | "running" | "completed" | "aborted";
@@ -178,6 +181,28 @@ export class PhaseOneRunManager {
       );
     }
 
+    // Detect provider type from environment variables
+    const valueFromEnv = (...keys: string[]): string | undefined => {
+      for (const key of keys) {
+        const value = process.env[key];
+        if (value && value.trim()) {
+          return value.trim();
+        }
+      }
+      return undefined;
+    };
+
+    let providerType: "openai" | "claude" | "azure" | "openrouter" = "openai"; // default
+    if (valueFromEnv("OPENAI_API_KEY")) {
+      providerType = "openai";
+    } else if (valueFromEnv("ANTHROPIC_API_KEY")) {
+      providerType = "claude";
+    } else if (valueFromEnv("AZURE_OPENAI_API_KEY")) {
+      providerType = "azure";
+    } else if (valueFromEnv("OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY")) {
+      providerType = "openrouter";
+    }
+
     const runId = randomUUID();
     const plan = this.parseFeatureOrThrow(normalizedInput.featureText);
 
@@ -189,6 +214,7 @@ export class PhaseOneRunManager {
         tokenCap: normalizedInput.tokenCap,
         orchestratorModel,
         auditorModel,
+        providerType,
       },
       plan,
       estimate,
@@ -513,19 +539,61 @@ export class PhaseOneRunManager {
     const normalizedStepStatus: "passed" | "failed" | "aborted" =
       stepResult.status === "passed" ? "passed" : stepResult.status === "failed" ? "failed" : "aborted";
 
-    // Note: Phase 09 converts validator to async with real LLM calls.
-    // Full integration in runManager happens in Wave 2 plan 09-02.
-    // Using placeholder for now to maintain compatibility.
-    const verdict: "matches" | "contradicts" | "uncertain" = normalizedStepStatus === "passed" ? "matches" : "contradicts";
-    const validation: StepValidation = {
-      auditorModel: "gpt-4.1-mini",
-      tier: "low",
-      verdict,
-      confidence: normalizedStepStatus === "passed" ? 0.8 : 0.9,
-      needsReview: false,
-      hallucinated: false,
-      rationale: "Placeholder validation - real async validator wired in Wave 2",
-    };
+    // Wave 2 Task 2: Wire async vision validator with real LLM calls
+    let validation: StepValidation;
+    
+    try {
+      // Only validate failed/uncertain steps to save costs
+      if (normalizedStepStatus !== "passed" && screenshotPath) {
+        // Build auditorProvider from config
+        const providerType = session.config.providerType ?? "openai";
+        const auditorProvider = await createProvider({
+          provider: providerType,
+          model: session.config.auditorModel ?? "gpt-4.1",
+        });
+
+        // Read screenshot buffer
+        let imageBuffer: Buffer | undefined;
+        try {
+          imageBuffer = await readFile(screenshotPath);
+        } catch (err) {
+          this.logger.warn({ screenshotPath, err }, "Failed to read screenshot for vision validation");
+          // Fall through with undefined buffer - validator will handle it
+        }
+
+        // Call async validator with multimodal context
+        validation = await validateStepWithVision({
+          imageBuffer,
+          provider: auditorProvider,
+          stepStatus: normalizedStepStatus,
+          stepText: stepResult.stepText,
+          orchestratorModel: session.config.orchestratorModel ?? "gpt-4o",
+        });
+      } else {
+        // Passed steps or no screenshot: simple verdict without LLM call
+        validation = {
+          auditorModel: session.config.auditorModel ?? "gpt-4.1",
+          tier: "low",
+          verdict: normalizedStepStatus === "passed" ? "matches" : "contradicts",
+          confidence: normalizedStepStatus === "passed" ? 0.95 : 0.5,
+          needsReview: false,
+          hallucinated: false,
+          rationale: normalizedStepStatus === "passed" ? "Passed step presumed correct" : "Failed step but no screenshot for LLM review",
+        };
+      }
+    } catch (err) {
+      // Fallback if validation throws - don't let validator errors break the run
+      this.logger.warn({ err, stepId: stepResult.stepId }, "Async validator error - using fallback");
+      validation = {
+        auditorModel: session.config.auditorModel ?? "gpt-4.1",
+        tier: "low",
+        verdict: "uncertain",
+        confidence: 0.2,
+        needsReview: true,
+        hallucinated: false,
+        rationale: "Validation error - human review recommended",
+      };
+    }
 
     const mcpValidation = session.stepValidationByMcp.get(mcpId);
     if (mcpValidation) {

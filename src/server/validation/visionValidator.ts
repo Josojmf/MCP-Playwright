@@ -16,7 +16,7 @@ export interface StepValidation {
 export interface VisionValidationInput {
   stepStatus: "passed" | "failed" | "aborted";
   stepText: string;
-  imageBuffer: Buffer;
+  imageBuffer?: Buffer;
   provider: LLMProvider;
   orchestratorModel: string;
   lowCostAuditorModel?: string;
@@ -28,6 +28,18 @@ export interface VisionValidationInput {
  * Uses tiered escalation: low-cost model first, high-accuracy on contradiction.
  */
 export async function validateStepWithVision(input: VisionValidationInput): Promise<StepValidation> {
+  // D-19: Safe fallback when screenshot unavailable
+  if (!input.imageBuffer) {
+    return {
+      auditorModel: input.lowCostAuditorModel ?? "gpt-4.1-mini",
+      tier: "low",
+      verdict: "uncertain",
+      confidence: 0.0,
+      needsReview: true,
+      hallucinated: false,
+      rationale: "No screenshot captured - cannot perform vision validation",
+    };
+  }
   const lowModel =
     input.lowCostAuditorModel && input.lowCostAuditorModel !== input.orchestratorModel
       ? input.lowCostAuditorModel
@@ -67,7 +79,7 @@ async function runLowTierLLMEvaluation(
   input: VisionValidationInput,
   auditorModel: string
 ): Promise<StepValidation> {
-  const imageB64 = input.imageBuffer.toString("base64");
+  const imageB64 = input.imageBuffer!.toString("base64");
   const imageUrl = `data:image/png;base64,${imageB64}`;
 
   const userMessage: LLMMessage = {
@@ -146,7 +158,7 @@ async function runHighTierLLMEvaluation(
   auditorModel: string,
   lowPass: StepValidation
 ): Promise<StepValidation> {
-  const imageB64 = input.imageBuffer.toString("base64");
+  const imageB64 = input.imageBuffer!.toString("base64");
   const imageUrl = `data:image/png;base64,${imageB64}`;
 
   const userMessage: LLMMessage = {
