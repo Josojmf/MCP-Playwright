@@ -100,6 +100,8 @@ Replaces the live column view when `runState === "completed"` or `runState === "
 +--------------------------------------------------------------+
 ```
 
+**Primary visual anchor: the metrics summary table.** It is the first element rendered and occupies full panel width — the eye lands here before the step replay accordion below.
+
 - **Metrics table:** standard HTML `<table>` with existing `metric-card` / `metric-label` / `metric-value` class patterns extended to table cells. No third-party table component.
 - **Table header row:** 11px uppercase weight 600 `--app-muted` cells.
 - **Table body rows:** one row per MCP. 14px weight 400 `--app-fg`. Alternating row background: even rows `--app-panel`, odd rows `--app-panel-strong`.
@@ -130,7 +132,7 @@ Inherited from Phase 1 — no changes.
 |---------|-------|--------|
 | Column gap | 16px (md) | Tighter than xl — columns are already wide |
 | Screenshot thumbnail height | 168px | Fixed aspect ratio for 16:9 browser screenshots |
-| Step row padding (replay) | 10px 12px | Denser than md — scorecard rows need to be scannable, not spacious |
+| Step row padding (replay) | 8px 16px | sm vertical / md horizontal — on-grid values; rows are scannable without extra height |
 | Lightbox modal padding | 20px | Inherited from Phase 1 modal spec |
 | Tab trigger height | 36px | Matches sidebar nav item height for visual consistency |
 
@@ -156,6 +158,10 @@ Inherited from Phase 1 — no new sizes or weights added.
 ## Color
 
 All tokens inherited from Phase 1. No new tokens introduced.
+
+**60/30/10 split: inherited from Phase 1 — unchanged.**
+
+**"Abortar Ejecución" button** uses Phase 1's destructive button styling (`variant="destructive"` on the shadcn Button component — `--app-danger` background, `--app-danger-fg` text).
 
 ### Phase 11 Semantic Color Additions
 
@@ -202,7 +208,7 @@ container:
   padding: 16px
   display: flex
   flex-direction: column
-  gap: 12px
+  gap: 8px
   min-width: 320px
 
 header row:
@@ -246,7 +252,7 @@ hallucinated:
   background: color-mix(in srgb, var(--app-danger) 10%, var(--app-panel))
   border-left: 3px solid color-mix(in srgb, var(--app-danger) 30%, transparent)
   border-radius: 4px
-  padding: 10px 12px
+  padding: 8px 16px
 
   icon: XCircle at 16px text-[var(--app-danger)]
   label: "[HALLUCINATED]" — 11px weight 600 uppercase letter-spacing 0.10em text-[var(--app-danger)]
@@ -255,7 +261,7 @@ needs-review:
   background: color-mix(in srgb, var(--app-warning) 10%, var(--app-panel))
   border-left: 3px solid color-mix(in srgb, var(--app-warning) 30%, transparent)
   border-radius: 4px
-  padding: 10px 12px
+  padding: 8px 16px
 
   icon: AlertTriangle at 16px text-[var(--app-warning)]
   label: "[NEEDS REVIEW]" — 11px weight 600 uppercase letter-spacing 0.10em text-[var(--app-warning)]
@@ -297,7 +303,7 @@ thead th:
   text-transform: uppercase
   letter-spacing: 0.10em
   color: var(--app-muted)
-  padding: 10px 12px
+  padding: 8px 16px
   text-align: left
   border-bottom: 1px solid var(--app-border)
   background: var(--app-panel-strong)
@@ -311,7 +317,7 @@ tbody td:
   font-size: 14px
   font-weight: 400
   color: var(--app-fg)
-  padding: 10px 12px
+  padding: 8px 16px
   border-bottom: 1px solid var(--app-border)
 
 tbody td:first-child (MCP name):
@@ -328,7 +334,7 @@ MCP section header (clickable):
   display: flex
   align-items: center
   gap: 8px
-  padding: 10px 12px
+  padding: 8px 16px
   background: var(--app-panel-strong)
   border: 1px solid var(--app-border)
   border-radius: 4px
@@ -342,7 +348,7 @@ Step row (collapsed, single line):
   display: flex
   align-items: center
   gap: 8px
-  padding: 10px 12px
+  padding: 8px 16px
   border: 1px solid var(--app-border)
   border-radius: 4px
   margin-top: 4px
@@ -358,7 +364,7 @@ Step row (collapsed, single line):
   hover: background var(--app-panel-strong)
 
 Step row (expanded):
-  same container as collapsed + padding-bottom: 12px
+  same container as collapsed + padding-bottom: 16px
   screenshot: width 100%; max-height: 240px; object-fit: contain; border 1px solid var(--app-border); border-radius: 4px; margin-top: 8px
   "Ver screenshot" link: same accent underline pattern as RunDetailView.tsx:130
 ```
@@ -417,7 +423,7 @@ TabsTrigger:
 | Empty scorecard (no steps) | Sin pasos registrados. |
 | Scorecard error state | Error cargando resultados. Recarga la página para reintentar. |
 
-**Destructive actions in Phase 11:** "Abortar Ejecución" is the sole destructive action. It is already in the live run flow from Phase 1 — single-click abort, no additional confirmation dialog. This is consistent with existing behavior in `LiveStepTimeline`.
+**Destructive actions in Phase 11:** "Abortar Ejecución" is the sole destructive action. It is already in the live run flow from Phase 1 — single-click abort, no additional confirmation dialog. This is consistent with existing behavior in `LiveStepTimeline`. Uses Phase 1's destructive button styling (`variant="destructive"` on the shadcn Button component).
 
 ---
 
