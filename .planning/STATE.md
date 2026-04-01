@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-last_updated: "2026-03-31T18:55:44.857Z"
+status: Executing Phase 08
+last_updated: "2026-04-01T09:02:07.310Z"
 progress:
   total_phases: 10
   completed_phases: 2
-  total_plans: 9
-  completed_plans: 17
+  total_plans: 11
+  completed_plans: 18
 ---
 
 # Project State
@@ -18,7 +18,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-03-30)
 
 **Core value:** Honest, reproducible comparison of MCP tool quality for E2E browser automation — exposing which MCPs actually work versus which ones hallucinate.
-**Current focus:** Phase 07 — wire-dead-modules
+**Current focus:** Phase 08 — real-mcp-process-protocol
 
 ## Status
 
@@ -45,6 +45,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 - [Phase 07]: VALID-02: runAssertion() called on Then steps after LLM success; assertion failure overrides step status to 'failed' independently of MCP report
 - [Phase 07-02]: InstrumentedMcpClient wired with stub BaseMcpClient in executeMcpRun; Phase 8 replaces stub with real protocol client for real screenshot capture
 - [Phase 07-04]: Stale-ref errors annotate step message with [STALE-REF] prefix and skip benchmark failure counting; run-level catch also traces stale-ref via traceStaleRefRecovery()
+- [Phase 08-real-mcp-process-protocol]: McpProcessManager implements BaseMcpClient using @modelcontextprotocol/sdk Client + StdioClientTransport; registry-driven spawnCommand; health check via successful initialize handshake
 
 ## Metrics
 

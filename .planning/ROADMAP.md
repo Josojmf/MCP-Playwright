@@ -302,7 +302,7 @@
 **Plans:** 2 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — Registry spawnCommand + McpProcessManager rewrite + wiring into executeMcpRun (EXEC-03)
+- [x] 08-01-PLAN.md — Registry spawnCommand + McpProcessManager rewrite + wiring into executeMcpRun (EXEC-03)
 - [ ] 08-02-PLAN.md — CLI real provider, LoopDetector fingerprint fix, estimateRun pricing fix (CLI-01, INFRA-04, ORCH-07)
 
 **Success Criteria**:

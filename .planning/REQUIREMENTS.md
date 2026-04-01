@@ -48,7 +48,7 @@
 
 - [ ] **EXEC-01**: `OrchestratorService.runScenario()` drives a full Gherkin scenario against one MCP as an `AsyncGenerator<StepResult>`
 - [ ] **EXEC-02**: All selected MCPs run the same scenario in parallel simultaneously (one isolated process per MCP)
-- [ ] **EXEC-03**: MCP process lifecycle: spawn, health-check, cleanup on completion and on crash
+- [x] **EXEC-03**: MCP process lifecycle: spawn, health-check, cleanup on completion and on crash
 - [ ] **EXEC-04**: Pre-flight check before any run: Playwright binary version match, MCP capability negotiation logged
 - [ ] **EXEC-05**: ARIA ref staleness handled: detect stale-ref error class, retry with fresh snapshot, not counted as benchmark failure
 - [ ] **EXEC-06**: Cloud MCP latency instrumented separately: tool-call-sent timestamp vs. result-received timestamp reported in scorecard
@@ -157,7 +157,7 @@
 | REGISTRY-06 | Phase 2 | Pending |
 | EXEC-01 | Phase 3 | Pending |
 | EXEC-02 | Phase 4 | Pending |
-| EXEC-03 | Phase 8 | Pending |
+| EXEC-03 | Phase 8 | Complete |
 | EXEC-04 | Phase 3 | Pending |
 | EXEC-05 | Phase 7 | Pending |
 | EXEC-06 | Phase 4 | Pending |
