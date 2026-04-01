@@ -13,7 +13,7 @@ import { McpProcessManager } from "./mcp/McpProcessManager";
 import { preflight } from "./mcp/preflight";
 import { saveScreenshot as saveFileScreenshot } from "./storage/screenshots";
 import { validateStepWithVision, type StepValidation } from "./validation/visionValidator";
-import { InstrumentedMcpClient, type BaseMcpClient } from "./mcp/InstrumentedMcpClient";
+import { InstrumentedMcpClient } from "./mcp/InstrumentedMcpClient";
 import { isStaleRefError, traceStaleRefRecovery } from "./mcp/stalenessRecovery";
 
 export interface RunEstimateRequest {
@@ -341,14 +341,8 @@ export class PhaseOneRunManager {
     const processManager = new McpProcessManager(mcpId);
     const providerConfig = this.resolveProviderConfig();
 
-    // Stub MCP client -- Phase 8 replaces with real MCP protocol client
-    const stubMcpClient: BaseMcpClient = {
-      async callTool(name: string, args: Record<string, unknown>) {
-        void args;
-        return { type: 'success' as const, content: [{ type: 'text', text: `Stub: ${name}` }] };
-      },
-    };
-    const instrumentedClient = new InstrumentedMcpClient(stubMcpClient);
+    // Real MCP client via McpProcessManager (Phase 8)
+    const instrumentedClient = new InstrumentedMcpClient(processManager);
 
     try {
       this.emit(session, "mcp_ready", {
@@ -432,7 +426,6 @@ export class PhaseOneRunManager {
 
           // Collect instrumented traces for this step (connects InstrumentedMcpClient pipeline)
           const instrumentedTraces = instrumentedClient.getTraces();
-          // Traces will contain real screenshot data when Phase 8 provides a real BaseMcpClient
           this.logger.info({ mcpId, tracesCount: instrumentedTraces.length }, "InstrumentedMcpClient wired");
         }
       }
