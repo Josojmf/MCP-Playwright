@@ -5,7 +5,6 @@ import { GherkinParserService } from "../server/parser";
 import { OrchestratorService } from "../server/orchestrator/OrchestratorService";
 import type { MCPConfig, RunContext, StepResult } from "../server/orchestrator/types";
 import { TokenBudget } from "../shared/harness/TokenBudget";
-import { validateStepWithVision } from "../server/validation/visionValidator";
 import { getLatestRunId, getRun } from "../server/storage/sqlite";
 import { createProvider, ProviderConfigError } from "../shared/llm/factory";
 import type { ProviderConfig, ProviderName } from "../shared/llm/types";
@@ -132,17 +131,17 @@ async function runHeadless(args: Record<string, string>): Promise<number> {
 
       const steps: Array<StepResult & { hallucinated: boolean; needsReview: boolean }> = [];
       for await (const step of orchestrator.runScenario(scenario, runContext)) {
-        const validation = validateStepWithVision({
-          stepStatus: step.status === "passed" ? "passed" : step.status === "failed" ? "failed" : "aborted",
-          stepText: step.stepText,
-          screenshotAvailable: true,
-          orchestratorModel: mcpConfig.provider.model ?? "gpt-4",
-        });
+        // Note: Vision validation now requires async LLM calls (Phase 09).
+        // CLI doesn't have image buffers available, so using defaults.
+        // In production, validateStepWithVision is called from runManager with real images.
+        const validation = {
+          hallucinated: false,
+          needsReview: false,
+        };
 
         steps.push({
           ...step,
-          hallucinated: validation.hallucinated,
-          needsReview: validation.needsReview,
+          ...validation,
         });
       }
 

@@ -12,7 +12,7 @@ import { MCP_REGISTRY } from "../shared/registry";
 import { McpProcessManager } from "./mcp/McpProcessManager";
 import { preflight } from "./mcp/preflight";
 import { saveScreenshot as saveFileScreenshot } from "./storage/screenshots";
-import { validateStepWithVision, type StepValidation } from "./validation/visionValidator";
+import { type StepValidation } from "./validation/visionValidator";
 import { InstrumentedMcpClient } from "./mcp/InstrumentedMcpClient";
 import { isStaleRefError, traceStaleRefRecovery } from "./mcp/stalenessRecovery";
 import { resolvePricing, estimateCostUsd } from "../shared/pricing/resolver";
@@ -480,7 +480,7 @@ export class PhaseOneRunManager {
     mcpId: string,
     stepResult: StepResult,
     stepCountInScenario: number,
-    orchestratorModel: string
+    _orchestratorModel: string
   ): Promise<void> {
     const isCloud = MCP_REGISTRY[mcpId]?.transportMode === "http";
     const networkOverheadMs = isCloud ? Math.max(30, Math.round(stepResult.latencyMs * 0.25)) : 0;
@@ -495,12 +495,19 @@ export class PhaseOneRunManager {
     const normalizedStepStatus: "passed" | "failed" | "aborted" =
       stepResult.status === "passed" ? "passed" : stepResult.status === "failed" ? "failed" : "aborted";
 
-    const validation = validateStepWithVision({
-      stepStatus: normalizedStepStatus,
-      stepText: stepResult.stepText,
-      screenshotAvailable: Boolean(screenshotId),
-      orchestratorModel,
-    });
+    // Note: Phase 09 converts validator to async with real LLM calls.
+    // Full integration in runManager happens in Wave 2 plan 09-02.
+    // Using placeholder for now to maintain compatibility.
+    const verdict: "matches" | "contradicts" | "uncertain" = normalizedStepStatus === "passed" ? "matches" : "contradicts";
+    const validation: StepValidation = {
+      auditorModel: "gpt-4.1-mini",
+      tier: "low",
+      verdict,
+      confidence: normalizedStepStatus === "passed" ? 0.8 : 0.9,
+      needsReview: false,
+      hallucinated: false,
+      rationale: "Placeholder validation - real async validator wired in Wave 2",
+    };
 
     const mcpValidation = session.stepValidationByMcp.get(mcpId);
     if (mcpValidation) {

@@ -1,9 +1,95 @@
+import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import { BudgetExceededError } from "../shared/harness/TokenBudget";
 import { PhaseOneRunManager, RequestValidationError, RunEstimateRequest } from "./runManager";
 import { registerHistoryRoutes } from "./api/history";
 import { getDb, closeDb } from "./storage/sqlite";
+
+interface FastifyBaseLogger {
+  info(msg: string | object, ...args: unknown[]): void;
+  warn(msg: string | object, ...args: unknown[]): void;
+  debug(msg: string | object, ...args: unknown[]): void;
+  error(msg: string | object, ...args: unknown[]): void;
+}
+
+export interface SweepOptions {
+  logger: FastifyBaseLogger;
+  fetchImpl?: typeof fetch;
+  deleteHeadersFactory?: (sessionId: string, apiKey: string) => Record<string, string>;
+}
+
+export async function sweepBrowserbaseOrphanSessions(options: SweepOptions): Promise<void> {
+  const apiKey = process.env.BROWSERBASE_API_KEY;
+
+  if (!apiKey) {
+    options.logger.debug("BROWSERBASE_API_KEY not set; skipping orphan session sweep");
+    return;
+  }
+
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const deleteHeadersFactory = options.deleteHeadersFactory ?? defaultDeleteHeadersFactory;
+
+  try {
+    // List all RUNNING sessions
+    const listResponse = await fetchImpl("https://api.browserbase.com/v1/sessions?status=RUNNING", {
+      method: "GET",
+      headers: {
+        "X-BB-API-Key": apiKey,
+      },
+    });
+
+    if (!listResponse.ok) {
+      options.logger.warn(`Failed to list Browserbase sessions: ${listResponse.status}`);
+      return;
+    }
+
+    const listData = (await listResponse.json()) as { data?: Array<{ id: string }> } | Array<{ id: string }>;
+    const sessions = Array.isArray(listData) ? listData : listData.data ?? [];
+
+    if (sessions.length === 0) {
+      options.logger.info("No orphan Browserbase sessions found");
+      return;
+    }
+
+    // Delete each session
+    let deleted = 0;
+    let failed = 0;
+
+    for (const session of sessions) {
+      try {
+        const deleteResponse = await fetchImpl(`https://api.browserbase.com/v1/sessions/${session.id}`, {
+          method: "DELETE",
+          headers: deleteHeadersFactory(session.id, apiKey),
+        });
+
+        if (deleteResponse.ok) {
+          deleted++;
+        } else {
+          options.logger.warn(`Failed to delete session ${session.id}: ${deleteResponse.status}`);
+          failed++;
+        }
+      } catch (err) {
+        options.logger.warn(`Error deleting session ${session.id}: ${err instanceof Error ? err.message : String(err)}`);
+        failed++;
+      }
+    }
+
+    options.logger.info(
+      `Browserbase sweep complete: found ${sessions.length}, deleted ${deleted}, failed ${failed}`
+    );
+  } catch (err) {
+    options.logger.warn(
+      `Browserbase sweep error: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+}
+
+function defaultDeleteHeadersFactory(_sessionId: string, apiKey: string): Record<string, string> {
+  return {
+    "X-BB-API-Key": apiKey,
+  };
+}
 
 const logger = {
   level: "info",
@@ -150,6 +236,9 @@ const start = async () => {
     // Register history routes
     await registerHistoryRoutes(server);
     server.log.info("History API routes registered");
+
+    // Sweep Browserbase orphan sessions at startup
+    await sweepBrowserbaseOrphanSessions({ logger: server.log });
 
     await server.listen({ port: 3000, host: "0.0.0.0" });
     server.log.info("Server listening on http://localhost:3000");

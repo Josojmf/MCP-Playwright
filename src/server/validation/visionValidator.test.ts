@@ -37,8 +37,9 @@ class MockLLMProvider implements LLMProvider {
     };
   }
 
-  async stream() {
-    throw new Error("Not implemented");
+  async *stream() {
+    // Mock stream implementation
+    yield { id: "mock-123", model: "test", index: 0, delta: "test", finishReason: "stop" };
   }
 
   async estimateCost() {
@@ -109,8 +110,9 @@ test("validateStepWithVision: JSON inválido vuelve a uncertain con review", asy
         },
       };
     }
-    async stream() {
-      throw new Error("Not implemented");
+    async *stream() {
+      // Mock stream implementation  
+      yield { id: "mock-bad", model: "test", index: 0, delta: "test", finishReason: "stop" };
     }
     async estimateCost() {
       return 0.001;
