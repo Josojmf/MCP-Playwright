@@ -207,7 +207,7 @@ function runDebug(args: Record<string, string>): number {
       : "vision=n/a";
 
     const isHallucinated = step.validation?.hallucinated === true;
-    const isNeedsReview = step.validation?.verdict === "needsReview" || step.validation?.needsReview === true;
+    const isNeedsReview = step.validation?.needsReview === true;
     const validationFlag = isHallucinated
       ? " [HALLUCINATED]"
       : isNeedsReview
