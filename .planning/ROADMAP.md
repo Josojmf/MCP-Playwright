@@ -20,7 +20,7 @@
 | 6 | CLI & Export | CI-ready headless CLI, debug mode, run history export, mcp-playwright community server | 5 | Completed |
 | 7 | Wire Dead Modules into Execution Path | 5/5 | Complete   | 2026-03-31 |
 | 8 | Real MCP Process Protocol & Integration Fixes | Replace stub MCP process with real JSON-RPC stdio communication; fix loop detection and pricing | 4 | Pending |
-| 9 | Real Vision LLM Validation | Implement async LLM API call in vision validator; back hallucination detection with real model verdicts | 6 | Completed |
+| 9 | Real Vision LLM Validation | 4/4 | Complete   | 2026-04-01 |
 | 10 | CLI Debug Trace & CSV Scorecard | Fix debug tool-call trace output and CSV per-MCP scorecard format | 2 | Pending |
 
 ---
