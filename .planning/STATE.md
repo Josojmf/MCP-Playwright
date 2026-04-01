@@ -91,6 +91,13 @@ Phase 09 complete. Ready for verification gate (gsd-verifier). Phase 10 pending 
 - **Status verification**: All tests passing, TypeScript clean, working directory clean
 - **Release ready**: All decision points resolved, requirements satisfied
 
+## Accumulated Context
+
+### Pending Todos
+
+- 1 pending todo in `.planning/todos/pending`
+- Latest: `2026-04-01-mostrar-screenshot-o-video-por-paso.md`
+
 ---
 
 Updated: 2026-04-01 after completing Phase 09 execution
