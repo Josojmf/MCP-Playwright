@@ -24,6 +24,7 @@ export interface RunEstimateRequest {
   tokenCap: number;
   provider: string;   // e.g. "openai", "claude", "azure", "openrouter"
   model?: string;     // optional; "default" used as fallback
+  auditorModel?: string; // optional auditor model for vision validation; defaults to gpt-4.1
 }
 
 export interface RunEstimate {
