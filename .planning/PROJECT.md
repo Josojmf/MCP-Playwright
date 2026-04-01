@@ -17,6 +17,10 @@ Honest, reproducible comparison of MCP tool quality for E2E browser automation �
 - Dual-layer step validation: runAssertion() wired for Then steps — assertion failures override LLM-reported pass (Validated in Phase 07: wire-dead-modules)
 - InstrumentedMcpClient screenshot pipeline wired into executeMcpRun() (Validated in Phase 07: wire-dead-modules)
 - Stale ARIA ref detection and tracing in benchmark execution path (Validated in Phase 07: wire-dead-modules)
+- Real MCP JSON-RPC stdio communication via @modelcontextprotocol/sdk — initialize handshake, tools/list, tools/call (Validated in Phase 08: real-mcp-process-protocol)
+- Loop detection on actual MCP tool call fingerprints (name + args) — not Gherkin step text (Validated in Phase 08: real-mcp-process-protocol)
+- estimateRun() pricing from live resolvePricing() table — not hardcoded constants (Validated in Phase 08: real-mcp-process-protocol)
+- CLI uses real createProvider() factory — real LLM responses, not mock synthetic output (Validated in Phase 08: real-mcp-process-protocol)
 
 ### Active
 
@@ -107,4 +111,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-31 after Phase 07 completion — wire-dead-modules complete*
+*Last updated: 2026-04-01 after Phase 08 completion — real-mcp-process-protocol complete*
