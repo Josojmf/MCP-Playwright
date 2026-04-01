@@ -80,12 +80,12 @@
 
 - [ ] **CLI-01**: Headless CLI runner: `npx mcp-bench run --url <url> --feature <file.feature>` outputs structured JSON results
 - [ ] **CLI-02**: CI-compatible exit codes: 0 = all MCPs passed all steps, 1 = any failure or hallucination detected
-- [ ] **CLI-03**: Developer debug mode: `mcp-bench debug --mcp <name>` replays step responses, shows MCP tool call trace in terminal
+- [x] **CLI-03**: Developer debug mode: `mcp-bench debug --mcp <name>` replays step responses, shows MCP tool call trace in terminal
 
 ### History & Export
 
 - [ ] **HIST-01**: All run results persisted locally (SQLite) across sessions
-- [ ] **HIST-02**: Run results exportable as JSON (full detail) and CSV (scorecard summary)
+- [x] **HIST-02**: Run results exportable as JSON (full detail) and CSV (scorecard summary)
 - [ ] **HIST-03**: Run history view in UI: list of past runs with summary metrics, clickable to full scorecard
 
 ## v2 Requirements
@@ -180,9 +180,9 @@
 | UI-09 | Phase 1 | Pending |
 | CLI-01 | Phase 8 | Pending |
 | CLI-02 | Phase 6 | Pending |
-| CLI-03 | Phase 10 | Pending |
+| CLI-03 | Phase 10 | Complete |
 | HIST-01 | Phase 3 | Pending |
-| HIST-02 | Phase 10 | Pending |
+| HIST-02 | Phase 10 | Complete |
 | HIST-03 | Phase 3 | Pending |
 
 **Coverage:**

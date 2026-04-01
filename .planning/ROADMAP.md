@@ -21,7 +21,7 @@
 | 7 | Wire Dead Modules into Execution Path | 5/5 | Complete   | 2026-03-31 |
 | 8 | Real MCP Process Protocol & Integration Fixes | Replace stub MCP process with real JSON-RPC stdio communication; fix loop detection and pricing | 4 | Pending |
 | 9 | Real Vision LLM Validation | 4/4 | Complete   | 2026-04-01 |
-| 10 | CLI Debug Trace & CSV Scorecard | Fix debug tool-call trace output and CSV per-MCP scorecard format | 2 | Pending |
+| 10 | CLI Debug Trace & CSV Scorecard | 2/2 | Complete    | 2026-04-01 |
 
 ---
 
@@ -36,7 +36,7 @@
 - [x] **Phase 7: Wire Dead Modules into Execution Path** — assembleSystemPrompt, InstrumentedMcpClient, assertionsRunner, stalenessRecovery, TokenBudget wired in (completed 2026-03-31)
 - [ ] **Phase 8: Real MCP Process Protocol & Integration Fixes** — Real MCP stdio JSON-RPC, real CLI provider, loop detection fix, pricing fix
 - [x] **Phase 9: Real Vision LLM Validation** — Real async vision LLM call, multimodal support, hallucination detection with independent auditor (completed 2026-04-01)
-- [ ] **Phase 10: CLI Debug Trace & CSV Scorecard** — Tool call trace in debug mode, per-MCP CSV scorecard format
+- [x] **Phase 10: CLI Debug Trace & CSV Scorecard** — Tool call trace in debug mode, per-MCP CSV scorecard format (completed 2026-04-01)
 
 ---
 
@@ -364,11 +364,11 @@ Plans:
 
 **Requirements**: CLI-03, HIST-02
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 10-01-PLAN.md — Trazas completas en `runDebug()` con args/result/error truncados, latencia opcional por tool call y resaltado `[HALLUCINATED]/[NEEDS-REVIEW]` con `chalk` (CLI-03)
-- [ ] 10-02-PLAN.md — Export CSV por `(runId,mcpId)` con columnas `passRate`, `hallucinationCount`, `totalTokens`, `totalCostUsd` vía `RunDetail[]` en `/api/history/export.csv` (HIST-02)
+- [x] 10-01-PLAN.md — Trazas completas en `runDebug()` con args/result/error truncados, latencia opcional por tool call y resaltado `[HALLUCINATED]/[NEEDS-REVIEW]` con `chalk` (CLI-03)
+- [x] 10-02-PLAN.md — Export CSV por `(runId,mcpId)` con columnas `passRate`, `hallucinationCount`, `totalTokens`, `totalCostUsd` vía `RunDetail[]` en `/api/history/export.csv` (HIST-02)
 
 **Success Criteria**:
 1. `mcp-bench debug --mcp playwright` prints tool name, arguments, response, and latency for every tool call in a stored run.
