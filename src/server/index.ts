@@ -248,7 +248,7 @@ const start = async () => {
   }
 };
 
-void start();
+export { start };
 
 // Graceful shutdown
 process.on("SIGINT", () => {

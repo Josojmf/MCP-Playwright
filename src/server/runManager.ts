@@ -49,6 +49,8 @@ interface RunConfig {
   baseUrl: string;
   selectedMcpIds: string[];
   tokenCap: number;
+  orchestratorModel?: string;
+  auditorModel?: string;
 }
 
 type RunStatus = "pending" | "running" | "completed" | "aborted";
@@ -163,6 +165,19 @@ export class PhaseOneRunManager {
       );
     }
 
+    // Extract orchestrator model (the actual LLM model for running the scenario)
+    const orchestratorModel = normalizedInput.model || "default";
+    
+    // Extract auditor model (for vision validation), default to gpt-4.1
+    const auditorModel = normalizedInput.auditorModel || "gpt-4.1";
+
+    // Guard: auditor and orchestrator models cannot be the same
+    if (auditorModel === orchestratorModel) {
+      throw new RequestValidationError(
+        `Los modelos auditor y orchestrator no pueden ser iguales (ambos: ${orchestratorModel}). Usa diferentes modelos para garantizar verdicts imparciales.`
+      );
+    }
+
     const runId = randomUUID();
     const plan = this.parseFeatureOrThrow(normalizedInput.featureText);
 
@@ -172,6 +187,8 @@ export class PhaseOneRunManager {
         baseUrl: normalizedInput.baseUrl,
         selectedMcpIds: normalizedInput.selectedMcpIds,
         tokenCap: normalizedInput.tokenCap,
+        orchestratorModel,
+        auditorModel,
       },
       plan,
       estimate,

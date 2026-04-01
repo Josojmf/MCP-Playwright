@@ -103,7 +103,7 @@ test("createRun usa default auditorModel gpt-4.1 cuando no está configurado", (
     // auditorModel not provided - should default to gpt-4.1
   });
 
-  assert.ok(run.id);
+  assert.ok(run.runId);
   // After implementation, verify auditorModel is set
   // assert.equal(run.config.auditorModel, "gpt-4.1");
 });
@@ -119,8 +119,8 @@ test("createRun falla si auditorModel == orchestrator model (modelo igual)", () 
         selectedMcpIds: ["@playwright/mcp"],
         tokenCap: 12000,
         provider: "openai",
-        model: "gpt-4.1-turbo",
-        auditorModel: "gpt-4.1-turbo", // Same as model - should fail
+        model: "gpt-4o",
+        auditorModel: "gpt-4o", // Same as model - should fail
       }),
     (error) => error instanceof RequestValidationError && /auditor|model.*iguales/i.test(error.message)
   );
