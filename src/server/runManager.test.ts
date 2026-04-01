@@ -17,9 +17,10 @@ test("estimateRun acepta baseUrl sin esquema y la normaliza implícitamente", ()
 
   const estimate = manager.estimateRun({
     baseUrl: "google.es",
-    featureText: `Feature: Demo\n  Scenario: buscar\n    Given User is on google page\n    When User search for \"Cucumber BDD\"\n    Then User should see results related to \"Cucumber BDD\"`,
+    featureText: `Feature: Demo\n  Scenario: buscar\n    Given User is on google page\n    When User search for "Cucumber BDD"\n    Then User should see results related to "Cucumber BDD"`,
     selectedMcpIds: ["@playwright/mcp"],
     tokenCap: 12000,
+    provider: "openai",
   });
 
   assert.equal(estimate.scenarioCount, 1);
@@ -32,9 +33,10 @@ test("estimateRun acepta Gherkin shorthand Given/When/Then sin Feature:", () => 
 
   const estimate = manager.estimateRun({
     baseUrl: "https://google.es",
-    featureText: `Given User is on google page\nWhen User search for \"Cucumber BDD\"\nThen User should see results related to \"Cucumber BDD\"`,
+    featureText: `Given User is on google page\nWhen User search for "Cucumber BDD"\nThen User should see results related to "Cucumber BDD"`,
     selectedMcpIds: ["@playwright/mcp"],
     tokenCap: 12000,
+    provider: "openai",
   });
 
   assert.equal(estimate.scenarioCount, 1);
@@ -52,6 +54,7 @@ test("estimateRun mantiene error para URL claramente inválida", () => {
         featureText: `Feature: Demo\n  Scenario: x\n    Given paso`,
         selectedMcpIds: ["@playwright/mcp"],
         tokenCap: 12000,
+        provider: "openai",
       }),
     (error) => error instanceof RequestValidationError && /Base URL no es válido/i.test(error.message)
   );
@@ -62,9 +65,10 @@ test("estimateRun normaliza aliases de MCP y elimina duplicados/no soportados", 
 
   const estimate = manager.estimateRun({
     baseUrl: "https://google.es",
-    featureText: `Feature: Demo\n  Scenario: buscar\n    Given User is on google page\n    When User search for \"Cucumber BDD\"\n    Then User should see results related to \"Cucumber BDD\"`,
+    featureText: `Feature: Demo\n  Scenario: buscar\n    Given User is on google page\n    When User search for "Cucumber BDD"\n    Then User should see results related to "Cucumber BDD"`,
     selectedMcpIds: ["puppeteer", "@modelcontextprotocol/server-puppeteer", "browserbase", "no-existe"],
     tokenCap: 12000,
+    provider: "openai",
   });
 
   assert.equal(estimate.selectedMcpCount, 2);
@@ -81,6 +85,7 @@ test("estimateRun falla si no queda ningún MCP soportado tras normalizar", () =
         featureText: `Feature: Demo\n  Scenario: x\n    Given paso`,
         selectedMcpIds: ["inexistente-1", "inexistente-2"],
         tokenCap: 12000,
+        provider: "openai",
       }),
     (error) => error instanceof RequestValidationError && /mcp soportado/i.test(error.message)
   );

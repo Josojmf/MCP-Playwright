@@ -25,3 +25,29 @@ test("LoopDetector throws when tool budget is exceeded", () => {
     (error: unknown) => error instanceof LoopError
   );
 });
+
+test("LoopDetector detects loop on identical tool name + serialized args", () => {
+  const ld = new LoopDetector(3, 20);
+  ld.recordAndCheck({ name: "browser_click", argsString: '{"selector":"#btn"}' });
+  ld.recordAndCheck({ name: "browser_click", argsString: '{"selector":"#btn"}' });
+  assert.throws(
+    () => ld.recordAndCheck({ name: "browser_click", argsString: '{"selector":"#btn"}' }),
+    LoopError
+  );
+});
+
+test("LoopDetector does NOT trigger loop on same tool name with different args", () => {
+  const ld = new LoopDetector(3, 20);
+  ld.recordAndCheck({ name: "browser_click", argsString: '{"selector":"#btn1"}' });
+  ld.recordAndCheck({ name: "browser_click", argsString: '{"selector":"#btn2"}' });
+  ld.recordAndCheck({ name: "browser_click", argsString: '{"selector":"#btn3"}' });
+  // Should not throw — args are different each time
+});
+
+test("LoopDetector does NOT trigger loop on different tool names with same args", () => {
+  const ld = new LoopDetector(3, 20);
+  ld.recordAndCheck({ name: "browser_click", argsString: '{"url":"x"}' });
+  ld.recordAndCheck({ name: "browser_navigate", argsString: '{"url":"x"}' });
+  ld.recordAndCheck({ name: "browser_snapshot", argsString: '{"url":"x"}' });
+  // Should not throw — tool names differ
+});

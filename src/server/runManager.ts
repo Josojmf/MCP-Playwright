@@ -15,12 +15,15 @@ import { saveScreenshot as saveFileScreenshot } from "./storage/screenshots";
 import { validateStepWithVision, type StepValidation } from "./validation/visionValidator";
 import { InstrumentedMcpClient } from "./mcp/InstrumentedMcpClient";
 import { isStaleRefError, traceStaleRefRecovery } from "./mcp/stalenessRecovery";
+import { resolvePricing, estimateCostUsd } from "../shared/pricing/resolver";
 
 export interface RunEstimateRequest {
   baseUrl: string;
   featureText: string;
   selectedMcpIds: string[];
   tokenCap: number;
+  provider: string;   // e.g. "openai", "claude", "azure", "openrouter"
+  model?: string;     // optional; "default" used as fallback
 }
 
 export interface RunEstimate {
@@ -125,12 +128,14 @@ export class PhaseOneRunManager {
     const estimatedOutputTokens = this.estimateOutputTokens(stepCount, selectedMcpCount);
     const estimatedTotalTokens = estimatedInputTokens + estimatedOutputTokens;
 
-    const estimatedCostUsd = TokenBudget.estimateCostUsd({
-      inputTokens: estimatedInputTokens,
-      outputTokens: estimatedOutputTokens,
-      inputPer1MTokensUsd: 1.5,
-      outputPer1MTokensUsd: 6,
-    });
+    const pricing = resolvePricing(normalizedInput.provider, normalizedInput.model ?? 'default');
+    if (!pricing) {
+      throw new Error(
+        `Unknown pricing for provider "${normalizedInput.provider}" model "${normalizedInput.model ?? 'default'}". ` +
+        `Check PRICING_TABLE in src/shared/pricing/table.ts.`
+      );
+    }
+    const estimatedCostUsd = estimateCostUsd(estimatedInputTokens, estimatedOutputTokens, pricing);
 
     const withinBudget = estimatedTotalTokens <= normalizedInput.tokenCap;
 
@@ -393,11 +398,31 @@ export class PhaseOneRunManager {
         };
 
         for await (const stepResult of orchestrator.runScenario(scenario, runContext)) {
+          // D-13/D-14/D-15: Feed actual tool calls, not Gherkin step text
+          if (stepResult.toolCalls && stepResult.toolCalls.length > 0) {
+            for (const toolCall of stepResult.toolCalls) {
+              try {
+                loopDetector.recordAndCheck({
+                  name: toolCall.toolName,
+                  argsString: JSON.stringify(toolCall.arguments),
+                });
+              } catch (loopErr) {
+                if (loopErr instanceof LoopError) {
+                  // D-16: Mark step as 'aborted' not 'failed' for loop-guard termination
+                  const abortedResult = {
+                    ...stepResult,
+                    status: 'aborted' as const,
+                    message: `[LOOP] ${loopErr.message}`,
+                  };
+                  await this.trackStepResult(session, mcpId, abortedResult, scenario.steps.length, mcpConfig.provider.model ?? 'gpt-4');
+                  throw loopErr; // Re-throw to abort the run
+                }
+                throw loopErr;
+              }
+            }
+          }
+          // D-14: resetStep AFTER all tool calls in the step are fed
           loopDetector.resetStep();
-          loopDetector.recordAndCheck({
-            name: `${mcpId}:${stepResult.canonicalType}`,
-            argsString: stepResult.stepText,
-          });
 
           // EXEC-05: Check if step failure is a stale-ref error
           if (stepResult.status === "failed" && stepResult.message) {
