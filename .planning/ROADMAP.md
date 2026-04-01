@@ -364,9 +364,11 @@ Plans:
 
 **Requirements**: CLI-03, HIST-02
 
-**Plans**:
-1. Fix `runDebug()` tool call trace — iterate `step.toolCalls` array; print tool name, arguments (formatted JSON), response snippet, and latency per call; highlight hallucinated/needs-review steps with terminal color (CLI-03)
-2. Fix `buildSummaryCsv()` scorecard format — change from per-step or per-run rows to one row per MCP; add columns: `passRate`, `hallucinationCount`, `totalTokens`, `totalCostUsd`; verify importable into Excel/Google Sheets without errors (HIST-02)
+**Plans:** 2 plans
+
+Plans:
+- [ ] 10-01-PLAN.md — Trazas completas en `runDebug()` con args/result/error truncados, latencia opcional por tool call y resaltado `[HALLUCINATED]/[NEEDS-REVIEW]` con `chalk` (CLI-03)
+- [ ] 10-02-PLAN.md — Export CSV por `(runId,mcpId)` con columnas `passRate`, `hallucinationCount`, `totalTokens`, `totalCostUsd` vía `RunDetail[]` en `/api/history/export.csv` (HIST-02)
 
 **Success Criteria**:
 1. `mcp-bench debug --mcp playwright` prints tool name, arguments, response, and latency for every tool call in a stored run.
