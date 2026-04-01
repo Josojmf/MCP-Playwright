@@ -7,7 +7,8 @@ import type { MCPConfig, RunContext, StepResult } from "../server/orchestrator/t
 import { TokenBudget } from "../shared/harness/TokenBudget";
 import { validateStepWithVision } from "../server/validation/visionValidator";
 import { getLatestRunId, getRun } from "../server/storage/sqlite";
-import type { LLMProvider, LLMRequest, LLMResponse } from "../shared/llm/types";
+import { createProvider, ProviderConfigError } from "../shared/llm/factory";
+import type { ProviderConfig, ProviderName } from "../shared/llm/types";
 
 async function main() {
   const [command, ...rawArgs] = process.argv.slice(2);
@@ -48,11 +49,45 @@ async function runHeadless(args: Record<string, string>): Promise<number> {
     return 1;
   }
 
+  const providerFlag = args.provider;
+  if (!providerFlag) {
+    console.error(
+      'Error: --provider is required.\n' +
+      'Supported providers and required env vars:\n' +
+      '  openrouter  -> OPENROUTER_API_KEY\n' +
+      '  openai      -> OPENAI_API_KEY\n' +
+      '  azure       -> AZURE_OPENAI_API_KEY + AZURE_OPENAI_ENDPOINT\n' +
+      '  anthropic   -> ANTHROPIC_API_KEY'
+    );
+    return 1;
+  }
+
+  // D-09/Pitfall 1: CLI flag "anthropic" maps to ProviderName "claude"
+  const providerName: ProviderName = providerFlag === 'anthropic'
+    ? 'claude'
+    : providerFlag as ProviderName;
+
+  const providerConfig: ProviderConfig = {
+    provider: providerName,
+    model: args.model,  // undefined is fine — provider default applies (D-11)
+  };
+
+  let provider;
+  try {
+    provider = await createProvider(providerConfig);
+  } catch (err) {
+    if (err instanceof ProviderConfigError) {
+      console.error(`Provider configuration error: ${err.message}`);
+      return 1;
+    }
+    throw err;
+  }
+
   const featureText = readFileSync(resolve(featurePath), "utf-8");
   const parser = new GherkinParserService();
   const scenarios = parser.parseFeature(featureText);
 
-  const orchestrator = new OrchestratorService(createCliProvider());
+  const orchestrator = new OrchestratorService(provider);
   const budget = new TokenBudget({
     hardCapTokens: Number.isFinite(tokenCap) ? tokenCap : 12000,
     warnThresholdRatio: 0.8,
@@ -81,8 +116,8 @@ async function runHeadless(args: Record<string, string>): Promise<number> {
       const mcpConfig: MCPConfig = {
         id: mcpId,
         provider: {
-          provider: "openai",
-          model: "gpt-4",
+          provider: providerName,
+          model: args.model,
         },
       };
 
@@ -206,46 +241,10 @@ function parseArgs(rawArgs: string[]): Record<string, string> {
 }
 
 function printHelp() {
-  console.log("mcp-bench run --url <url> --feature <file.feature> [--mcp a,b] [--tokenCap 12000]");
+  console.log("mcp-bench run --url <url> --feature <file.feature> --provider <name> [--model <model>] [--mcp a,b] [--tokenCap 12000]");
+  console.log("  --provider: openrouter | openai | azure | anthropic (required)");
+  console.log("  --model: LLM model name (optional, provider default if omitted)");
   console.log("mcp-bench debug [--runId <runId>] [--mcp <filter>]");
-}
-
-function createCliProvider(): LLMProvider {
-  return {
-    async complete(request: LLMRequest): Promise<LLMResponse> {
-      const lastMessage = request.messages[request.messages.length - 1];
-      const syntheticText = `CLI mock ejecutado: ${lastMessage?.content ?? "step"}`;
-      const promptTokens = Math.max(1, Math.ceil(JSON.stringify(request.messages).length / 8));
-      const completionTokens = Math.max(1, Math.ceil(syntheticText.length / 8));
-      return {
-        id: `cli-${Date.now()}`,
-        model: request.model,
-        choices: [
-          {
-            index: 0,
-            finishReason: "stop",
-            message: {
-              role: "assistant",
-              content: syntheticText,
-            },
-          },
-        ],
-        usage: {
-          promptTokens,
-          completionTokens,
-          totalTokens: promptTokens + completionTokens,
-        },
-      };
-    },
-    async *stream(_request: LLMRequest) {
-      yield {
-        delta: "cli-mock",
-      };
-    },
-    async estimateCost(inputTokens: number, outputTokens: number, _model: string) {
-      return (inputTokens + outputTokens) * 0.000005;
-    },
-  };
 }
 
 void main();
