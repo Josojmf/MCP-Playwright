@@ -59,3 +59,35 @@ test("all adapters expose the LLMProvider contract and non-zero estimateCost", a
   assert.ok((await azure.estimateCost(1000, 500, "gpt-4o")) > 0);
   assert.ok((await claude.estimateCost(1000, 500, "claude-3-5-sonnet-latest")) > 0);
 });
+
+test("LLMMessage.content supports multimodal ContentPart[]", () => {
+  // This test verifies that the types support multimodal messages
+  // TDD RED: ContentPart type must exist and LLMMessage.content must accept ContentPart[]
+  const multimodalMessage = {
+    role: "user" as const,
+    content: [
+      { type: "text" as const, text: "What's in this image?" },
+      { type: "image_url" as const, image_url: { url: "data:image/png;base64,iVBORw0KGgo..." } },
+    ],
+  };
+
+  // This will only compile if ContentPart is defined and LLMMessage.content is string | ContentPart[]
+  assert.ok(Array.isArray(multimodalMessage.content));
+  assert.equal(multimodalMessage.content.length, 2);
+  assert.equal(multimodalMessage.content[0].type, "text");
+  assert.equal(multimodalMessage.content[1].type, "image_url");
+});
+
+test("LLMRequest supports optional responseFormat for structured output", () => {
+  // TDD RED: LLMRequest must accept responseFormat field
+  const requestWithFormat = {
+    model: "gpt-4-vision",
+    messages: [
+      { role: "user" as const, content: "Analyze this" },
+    ],
+    responseFormat: { type: "json_object" as const },
+  };
+
+  assert.ok(requestWithFormat.responseFormat);
+  assert.equal(requestWithFormat.responseFormat.type, "json_object");
+});

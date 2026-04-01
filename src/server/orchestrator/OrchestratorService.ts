@@ -108,7 +108,9 @@ Scenario: ${scenario.name}`,
           const latencyMs = Date.now() - stepStartTime;
 
           // Extract tool calls from response (simplified - in real impl, parse tool_use blocks)
-          const toolCalls: ToolCallTrace[] = this.extractToolCalls(response.choices[0]?.message?.content ?? "");
+          const msgContent = response.choices[0]?.message?.content ?? "";
+          const contentStr = typeof msgContent === "string" ? msgContent : "";
+          const toolCalls: ToolCallTrace[] = this.extractToolCalls(contentStr);
 
           // Update conversation history
           currentMessages.push(stepMessage);

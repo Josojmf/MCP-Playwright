@@ -1,8 +1,12 @@
 export type LLMRole = "system" | "user" | "assistant";
 
+export type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export interface LLMMessage {
   role: LLMRole;
-  content: string;
+  content: string | ContentPart[];
 }
 
 export interface LLMRequest {
@@ -11,6 +15,7 @@ export interface LLMRequest {
   maxTokens?: number;
   temperature?: number;
   topP?: number;
+  responseFormat?: { type: "json_object" };
 }
 
 export interface LLMUsage {

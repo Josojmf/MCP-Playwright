@@ -18,25 +18,36 @@ export class OpenRouterAdapter implements LLMProvider {
   }
 
   public async complete(request: LLMRequest): Promise<LLMResponse> {
+    const referer = process.env.OPENROUTER_HTTP_REFERER ?? process.env.OPENROUTER_SITE_URL;
+    const title = process.env.OPENROUTER_APP_NAME ?? "MCP-Playwright";
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.apiKey.trim()}`,
+      "Content-Type": "application/json",
+      "X-Title": title,
+    };
+
+    if (referer && referer.trim()) {
+      headers["HTTP-Referer"] = referer.trim();
+    }
+
     const response = await this.fetchImpl(this.endpoint, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "mcp-playwright",
-      },
+      headers,
       body: JSON.stringify({
         model: request.model,
         messages: request.messages,
         temperature: request.temperature,
         top_p: request.topP,
         max_tokens: request.maxTokens,
+        ...(request.responseFormat && { response_format: request.responseFormat }),
         stream: false,
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`OpenRouterAdapter request failed (${response.status})`);
+      const responseText = await response.text().catch(() => "");
+      const details = responseText ? `: ${responseText.slice(0, 500)}` : "";
+      throw new Error(`OpenRouterAdapter request failed (${response.status})${details}`);
     }
 
     const payload = (await response.json()) as OpenRouterChatCompletionResponse;
@@ -64,14 +75,15 @@ export class OpenRouterAdapter implements LLMProvider {
         message: {
           role: (choice.message?.role as LLMMessage["role"]) ?? "assistant",
           content: choice.message?.content ?? "",
-        },
+        } as LLMMessage,
       })),
     };
   }
 
   public async *stream(request: LLMRequest): AsyncIterable<LLMChunk> {
     const response = await this.complete(request);
-    const content = response.choices[0]?.message.content ?? "";
+    const msgContent = response.choices[0]?.message.content ?? "";
+    const content = typeof msgContent === "string" ? msgContent : "";
 
     yield {
       id: response.id,

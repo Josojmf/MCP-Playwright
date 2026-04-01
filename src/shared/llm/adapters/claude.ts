@@ -9,13 +9,23 @@ interface ClaudeMessageResponse {
   stop_reason?: string | null;
 }
 
+interface ClaudeContent {
+  type: "text" | "image";
+  text?: string;
+  source?: {
+    type: "base64";
+    media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+    data: string;
+  };
+}
+
 interface ClaudePayload {
   model: string;
   max_tokens: number;
   temperature?: number;
   top_p?: number;
   system?: string;
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  messages: Array<{ role: "user" | "assistant"; content: string | ClaudeContent[] }>;
 }
 
 export function splitSystemPrompt(messages: LLMMessage[]): { systemPrompt: string; conversation: LLMMessage[] } {
@@ -24,8 +34,9 @@ export function splitSystemPrompt(messages: LLMMessage[]): { systemPrompt: strin
 
   for (const message of messages) {
     if (message.role === "system") {
-      if (message.content.trim()) {
-        systemParts.push(message.content.trim());
+      const content = message.content;
+      if (typeof content === "string" && content.trim()) {
+        systemParts.push(content.trim());
       }
       continue;
     }
@@ -39,17 +50,72 @@ export function splitSystemPrompt(messages: LLMMessage[]): { systemPrompt: strin
   };
 }
 
+function translateImageToAnthropic(imageUrl: string): ClaudeContent | null {
+  // Translate data URI to Anthropic's base64 format
+  if (!imageUrl.startsWith("data:")) {
+    // For non-data URIs, return null (fallback to first text)
+    return null;
+  }
+
+  const matches = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!matches) {
+    return null;
+  }
+
+  const [, mediaType, base64Data] = matches;
+
+  // Map MIME types to Anthropic's supported types
+  let claudeMediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp" = "image/png";
+  if (mediaType.includes("jpeg")) claudeMediaType = "image/jpeg";
+  else if (mediaType.includes("png")) claudeMediaType = "image/png";
+  else if (mediaType.includes("gif")) claudeMediaType = "image/gif";
+  else if (mediaType.includes("webp")) claudeMediaType = "image/webp";
+
+  return {
+    type: "image",
+    source: {
+      type: "base64",
+      media_type: claudeMediaType,
+      data: base64Data,
+    },
+  };
+}
+
 export function toClaudePayload(request: LLMRequest): ClaudePayload {
   const { systemPrompt, conversation } = splitSystemPrompt(request.messages);
 
-  const normalizedMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
+  const normalizedMessages: Array<{ role: "user" | "assistant"; content: string | ClaudeContent[] }> = [];
 
   for (const message of conversation) {
     if (message.role === "user" || message.role === "assistant") {
-      normalizedMessages.push({
-        role: message.role,
-        content: message.content,
-      });
+      const content = message.content;
+      
+      // Handle string content as-is
+      if (typeof content === "string") {
+        normalizedMessages.push({
+          role: message.role,
+          content,
+        });
+      } else {
+        // Handle ContentPart[] content
+        const claudeContent: ClaudeContent[] = [];
+        
+        for (const part of content) {
+          if (part.type === "text") {
+            claudeContent.push({ type: "text", text: part.text });
+          } else if (part.type === "image_url") {
+            const translated = translateImageToAnthropic(part.image_url.url);
+            if (translated) {
+              claudeContent.push(translated);
+            }
+          }
+        }
+
+        normalizedMessages.push({
+          role: message.role,
+          content: claudeContent.length > 0 ? claudeContent : "Invalid image content",
+        });
+      }
     }
   }
 
@@ -119,7 +185,7 @@ export class ClaudeAdapter implements LLMProvider {
           message: {
             role: "assistant",
             content,
-          },
+          } as LLMMessage,
         },
       ],
     };
@@ -127,7 +193,8 @@ export class ClaudeAdapter implements LLMProvider {
 
   public async *stream(request: LLMRequest): AsyncIterable<LLMChunk> {
     const response = await this.complete(request);
-    const content = response.choices[0]?.message.content ?? "";
+    const msgContent = response.choices[0]?.message.content ?? "";
+    const content = typeof msgContent === "string" ? msgContent : "";
 
     yield {
       id: response.id,

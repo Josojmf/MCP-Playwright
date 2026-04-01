@@ -32,6 +32,7 @@ export class AzureOpenAIAdapter implements LLMProvider {
         temperature: request.temperature,
         top_p: request.topP,
         max_tokens: request.maxTokens,
+        ...(request.responseFormat && { response_format: request.responseFormat }),
         stream: false,
       }),
     });
@@ -62,14 +63,15 @@ export class AzureOpenAIAdapter implements LLMProvider {
         message: {
           role: (choice.message?.role as LLMMessage["role"]) ?? "assistant",
           content: choice.message?.content ?? "",
-        },
+        } as LLMMessage,
       })),
     };
   }
 
   public async *stream(request: LLMRequest): AsyncIterable<LLMChunk> {
     const response = await this.complete(request);
-    const content = response.choices[0]?.message.content ?? "";
+    const msgContent = response.choices[0]?.message.content ?? "";
+    const content = typeof msgContent === "string" ? msgContent : "";
 
     yield {
       id: response.id,
