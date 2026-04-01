@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import chalk from "chalk";
 import { GherkinParserService } from "../server/parser";
 import { OrchestratorService } from "../server/orchestrator/OrchestratorService";
 import type { MCPConfig, RunContext, StepResult } from "../server/orchestrator/types";
@@ -205,15 +206,67 @@ function runDebug(args: Record<string, string>): number {
       ? `vision=${step.validation.verdict} conf=${Math.round(step.validation.confidence * 100)}%`
       : "vision=n/a";
 
-    console.log(
+    const isHallucinated = step.validation?.hallucinated === true;
+    const isNeedsReview = step.validation?.verdict === "needsReview" || step.validation?.needsReview === true;
+    const validationFlag = isHallucinated
+      ? " [HALLUCINATED]"
+      : isNeedsReview
+        ? " [NEEDS-REVIEW]"
+        : "";
+
+    const stepHeader =
       `[${step.mcpId}] #${step.index + 1} ${step.canonicalType.toUpperCase()} ${step.status} ` +
-        `lat=${step.latencyMs}ms red=${step.networkOverheadMs}ms tok=${step.tokens.total} ${validation}`
-    );
+      `lat=${step.latencyMs}ms red=${step.networkOverheadMs}ms tok=${step.tokens.total} ${validation}${validationFlag}`;
+
+    const coloredHeader = isHallucinated
+      ? chalk.red(stepHeader)
+      : isNeedsReview
+        ? chalk.yellow(stepHeader)
+        : stepHeader;
+
+    console.log(coloredHeader);
     console.log(`  ${step.text}`);
     console.log(`  ${step.message}`);
+
+    for (const toolCall of step.toolCalls) {
+      if (!toolCall || typeof toolCall !== "object") {
+        continue;
+      }
+
+      const callRecord = toolCall as Record<string, unknown>;
+      const { toolName: rawToolName, name, args, result, error, latencyMs } = callRecord;
+      const toolName = String(rawToolName ?? name ?? "unknown_tool");
+
+      const argsText = truncateText(stringifyCompact(args), 200);
+      const resultLabel = result !== undefined ? "result" : "error";
+      const resultValue = result !== undefined
+        ? truncateText(String(result), 150)
+        : truncateText(String(error), 150);
+      const latencyText = typeof latencyMs === "number" ? ` lat=${latencyMs}ms` : "";
+
+      console.log(`    → ${toolName}  args: ${argsText}  ${resultLabel}: ${resultValue}${latencyText}`);
+    }
   }
 
   return 0;
+}
+
+function stringifyCompact(value: unknown): string {
+  try {
+    if (typeof value === "string") {
+      return value;
+    }
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, maxLength)}...`;
 }
 
 function parseArgs(rawArgs: string[]): Record<string, string> {
