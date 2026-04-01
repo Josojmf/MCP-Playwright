@@ -126,9 +126,13 @@ export async function registerHistoryRoutes(server: any) {
         return startedAtMs >= fromMs && startedAtMs <= toMs;
       });
 
+      const details = runs
+        .map((run) => getRun(run.id))
+        .filter((run): run is NonNullable<ReturnType<typeof getRun>> => Boolean(run));
+
       reply.header("Content-Type", "text/csv; charset=utf-8");
       reply.header("Content-Disposition", "attachment; filename=\"runs-summary.csv\"");
-      return reply.send(buildSummaryCsv(runs));
+      return reply.send(buildSummaryCsv(details));
     } catch (error) {
       server.log.error(error);
       return reply.code(500).send({
@@ -248,28 +252,47 @@ function buildRunCsv(run: NonNullable<ReturnType<typeof getRun>>): string {
   return [header, ...rows].map((row) => row.map((value) => csvValue(value)).join(",")).join("\n");
 }
 
-function buildSummaryCsv(runs: ReturnType<typeof listRuns>): string {
+function buildSummaryCsv(runs: Array<NonNullable<ReturnType<typeof getRun>>>): string {
   const header = [
     "runId",
-    "name",
-    "status",
-    "scenarioCount",
-    "totalSteps",
-    "startedAt",
-    "completedAt",
-    "summary",
+    "mcpId",
+    "passRate",
+    "hallucinationCount",
+    "totalTokens",
+    "totalCostUsd",
   ];
 
-  const rows = runs.map((run) => [
-    run.id,
-    run.name,
-    run.status,
-    run.scenarioCount,
-    run.totalSteps,
-    run.startedAt,
-    run.completedAt,
-    run.summary,
-  ]);
+  const rows: Array<Array<string | number>> = [];
+
+  for (const run of runs) {
+    const stepsByMcp = run.steps.reduce<Record<string, typeof run.steps>>((acc, step) => {
+      const key = step.mcpId || "unknown";
+      if (!acc[key]) {
+        acc[key] = [];
+      }
+      acc[key].push(step);
+      return acc;
+    }, {});
+
+    for (const [mcpId, mcpSteps] of Object.entries(stepsByMcp)) {
+      const totalSteps = mcpSteps.length;
+      const passedSteps = mcpSteps.filter((step) => step.status === "passed").length;
+      const passRate = totalSteps > 0 ? passedSteps / totalSteps : 0;
+      const hallucinationCount = mcpSteps.filter((step) => step.validation?.hallucinated === true).length;
+      const totalTokens = mcpSteps.reduce((sum, step) => sum + (step.tokens?.total ?? 0), 0);
+      const runTokens = run.totalTokens;
+      const totalCostUsd = runTokens > 0 ? (run.totalCostUsd * totalTokens) / runTokens : 0;
+
+      rows.push([
+        run.id,
+        mcpId,
+        Number(passRate.toFixed(2)),
+        hallucinationCount,
+        totalTokens,
+        Number(totalCostUsd.toFixed(4)),
+      ]);
+    }
+  }
 
   return [header, ...rows].map((row) => row.map((value) => csvValue(value)).join(",")).join("\n");
 }
