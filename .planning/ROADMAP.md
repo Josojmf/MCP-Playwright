@@ -20,7 +20,7 @@
 | 6 | CLI & Export | CI-ready headless CLI, debug mode, run history export, mcp-playwright community server | 5 | Completed |
 | 7 | Wire Dead Modules into Execution Path | 5/5 | Complete   | 2026-03-31 |
 | 8 | Real MCP Process Protocol & Integration Fixes | Replace stub MCP process with real JSON-RPC stdio communication; fix loop detection and pricing | 4 | Pending |
-| 9 | Real Vision LLM Validation | Implement async LLM API call in vision validator; back hallucination detection with real model verdicts | 6 | Pending |
+| 9 | Real Vision LLM Validation | Implement async LLM API call in vision validator; back hallucination detection with real model verdicts | 6 | Completed |
 | 10 | CLI Debug Trace & CSV Scorecard | Fix debug tool-call trace output and CSV per-MCP scorecard format | 2 | Pending |
 
 ---
@@ -35,7 +35,7 @@
 - [x] **Phase 6: CLI & Export** — Headless CLI runner, debug mode, JSON/CSV export
 - [x] **Phase 7: Wire Dead Modules into Execution Path** — assembleSystemPrompt, InstrumentedMcpClient, assertionsRunner, stalenessRecovery, TokenBudget wired in (completed 2026-03-31)
 - [ ] **Phase 8: Real MCP Process Protocol & Integration Fixes** — Real MCP stdio JSON-RPC, real CLI provider, loop detection fix, pricing fix
-- [ ] **Phase 9: Real Vision LLM Validation** — Real async vision LLM call, hallucination detection, NEEDS_REVIEW from real confidence
+- [x] **Phase 9: Real Vision LLM Validation** — Real async vision LLM call, multimodal support, hallucination detection with independent auditor (completed 2026-04-01)
 - [ ] **Phase 10: CLI Debug Trace & CSV Scorecard** — Tool call trace in debug mode, per-MCP CSV scorecard format
 
 ---
@@ -388,9 +388,9 @@ Plans:
 | 4. Parallel Execution Across Multiple MCPs | 3/3 | Completed | 2026-03-30 |
 | 5. Screenshot Validation & Scorecard | 4/4 | Completed | 2026-03-30 |
 | 6. CLI & Export | 3/3 | Completed | 2026-03-30 |
-| 7. Wire Dead Modules into Execution Path | 0/5 | Pending | — |
+| 7. Wire Dead Modules into Execution Path | 5/5 | Completed | 2026-03-31 |
 | 8. Real MCP Process Protocol & Integration Fixes | 0/4 | Pending | — |
-| 9. Real Vision LLM Validation | 0/3 | Pending | — |
+| 9. Real Vision LLM Validation | 3/3 | Completed | 2026-04-01 |
 | 10. CLI Debug Trace & CSV Scorecard | 0/2 | Pending | — |
 
 ---
@@ -432,14 +432,14 @@ Plans:
 | EXEC-04 | Phase 3 | Completed |
 | EXEC-05 | Phase 7 | Pending |
 | EXEC-06 | Phase 4 | Completed |
-| EXEC-07 | Phase 9 | Pending |
+| EXEC-07 | Phase 9 | Completed |
 | VALID-01 | Phase 7 | Pending |
 | VALID-02 | Phase 7 | Pending |
-| VALID-03 | Phase 9 | Pending |
-| VALID-04 | Phase 9 | Pending |
-| VALID-05 | Phase 9 | Pending |
-| VALID-06 | Phase 9 | Pending |
-| VALID-07 | Phase 9 | Pending |
+| VALID-03 | Phase 9 | Completed |
+| VALID-04 | Phase 9 | Completed |
+| VALID-05 | Phase 9 | Completed |
+| VALID-06 | Phase 9 | Completed |
+| VALID-07 | Phase 9 | Completed |
 | UI-01 | Phase 1 | Completed |
 | UI-02 | Phase 1 | Completed |
 | UI-03 | Phase 3 | Completed |
