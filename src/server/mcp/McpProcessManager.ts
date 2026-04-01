@@ -1,12 +1,25 @@
-import { spawn, ChildProcess } from 'node:child_process';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { MCP_REGISTRY } from '../../shared/registry';
+import type { BaseMcpClient, ToolResult } from './InstrumentedMcpClient';
+
+interface ToolDefinition {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+}
 
 /**
- * Lifecycle manager for MCP processes.
- * Handles spawning, health checks, graceful shutdown, and crash detection.
+ * Real MCP process lifecycle manager.
+ * Spawns an MCP server process via StdioClientTransport, performs the JSON-RPC
+ * initialize handshake, implements BaseMcpClient for callTool delegation,
+ * and detects crashes via transport onclose/onerror.
  */
-export class McpProcessManager {
-  private process: ChildProcess | null = null;
+export class McpProcessManager implements BaseMcpClient {
+  private transport: StdioClientTransport | null = null;
+  private client: Client | null = null;
   private mcpId: string;
+  private tools: ToolDefinition[] = [];
 
   public pid: number | null = null;
   public startedAt: Date | null = null;
@@ -15,114 +28,125 @@ export class McpProcessManager {
 
   constructor(mcpId: string) {
     this.mcpId = mcpId;
+
+    const entry = MCP_REGISTRY[mcpId];
+    if (!entry?.spawnCommand || entry.spawnCommand.length === 0) {
+      throw new Error(`No spawnCommand in registry for ${mcpId}`);
+    }
   }
 
   /**
-   * Spawn the MCP process.
-   * Returns { pid, startedAt } and exposes crash state.
+   * Spawn the MCP process, perform initialize handshake, and list available tools.
+   * Returns { pid, startedAt } on success.
    */
   public async spawn(): Promise<{ pid: number; startedAt: Date }> {
-    if (this.process !== null) {
-      throw new Error(
-        `Proceso MCP ya está en ejecución (PID: ${this.pid})`
-      );
+    if (this.client !== null) {
+      throw new Error('MCP process already running');
     }
 
-    // Spawn the process
-    this.process = spawn('node', ['-v'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    const [command, ...args] = MCP_REGISTRY[this.mcpId].spawnCommand!;
 
-    this.pid = this.process.pid!;
+    this.transport = new StdioClientTransport({ command, args, stderr: 'pipe' });
+    this.client = new Client({ name: 'mcp-bench', version: '1.0.0' }, { capabilities: {} });
+
+    // Wire crash detection before connecting
+    this.transport.onclose = () => {
+      if (!this.crashed) {
+        this.crashed = true;
+        this.crashReason = `MCP process (${this.mcpId}) transport closed unexpectedly`;
+      }
+    };
+
+    this.transport.onerror = (err: Error) => {
+      this.crashed = true;
+      this.crashReason = `MCP process (${this.mcpId}) transport error: ${err.message}`;
+    };
+
+    // client.connect() spawns the process AND performs the initialize handshake.
+    // Do NOT call transport.start() manually — that would throw "StdioClientTransport already started!"
+    await this.client.connect(this.transport);
+
+    // pid is available after transport start
+    this.pid = (this.transport as unknown as { _process?: { pid?: number } })._process?.pid ?? null;
     this.startedAt = new Date();
     this.crashed = false;
-    this.crashReason = null;
 
-    // Listen for exit/crash
-    this.process.on('exit', (code, signal) => {
-      this.crashed = true;
-      this.crashReason =
-        code !== 0
-          ? `Proceso MCP (${this.mcpId}) finalizó con código ${code}`
-          : `Proceso MCP (${this.mcpId}) terminado por signal ${signal}`;
-    });
+    // Discover available tools via tools/list
+    const { tools } = await this.client.listTools();
+    this.tools = tools as ToolDefinition[];
 
-    // Listen for error
-    this.process.on('error', (err) => {
-      this.crashed = true;
-      this.crashReason = `Proceso MCP (${this.mcpId}) error: ${err.message}`;
-    });
-
-    return { pid: this.pid, startedAt: this.startedAt };
+    return { pid: this.pid!, startedAt: this.startedAt };
   }
 
   /**
-   * Check if process is healthy.
+   * Health check via capability negotiation result.
+   * Returns true if client is connected and no crash detected.
    */
   public async healthCheck(): Promise<boolean> {
-    if (this.process === null || this.crashed) {
-      return false;
-    }
-
-    // Simple check: is process still alive?
-    try {
-      // Sending signal 0 checks if process exists without killing it
-      process.kill(this.pid!, 0);
-      return true;
-    } catch {
-      return false;
-    }
+    return this.client !== null && !this.crashed;
   }
 
   /**
-   * Stop the process gracefully, with fallback to SIGKILL.
+   * Delegate a tool call to the real MCP server via JSON-RPC.
+   */
+  public async callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
+    if (!this.client) {
+      throw new Error('MCP client not initialized');
+    }
+
+    const result = await this.client.callTool({ name, arguments: args });
+
+    return {
+      type: result.isError ? 'error' : 'success',
+      content: result.content as Array<{ type: string; text: string }>,
+      error: result.isError
+        ? String((result.content as Array<{ type: string; text: string }>)?.[0]?.text ?? 'tool error')
+        : undefined,
+    };
+  }
+
+  /**
+   * Returns the list of tools discovered during spawn().
+   */
+  public getTools(): ToolDefinition[] {
+    return this.tools;
+  }
+
+  /**
+   * Gracefully close the transport, with SIGKILL fallback on timeout.
    */
   public async stop(timeoutMs: number = 5000): Promise<void> {
-    if (this.process === null) {
+    if (this.transport === null) {
       return;
     }
 
-    // Try SIGTERM first
-    this.process.kill('SIGTERM');
-
-    // Wait for graceful shutdown
-    let isKilled = false;
-    const checkInterval = setInterval(() => {
-      try {
-        // signal 0 = check if alive without killing
-        if (this.pid !== null) {
-          process.kill(this.pid, 0);
-        }
-      } catch {
-        isKilled = true;
-        clearInterval(checkInterval);
-      }
-    }, 100);
-
-    const startTime = Date.now();
-    while (!isKilled && Date.now() - startTime < timeoutMs) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-
-    clearInterval(checkInterval);
-
-    // Force kill if still alive
-    if (this.process !== null && !isKilled) {
-      this.process.kill('SIGKILL');
-    }
+    await Promise.race([
+      this.transport.close(),
+      new Promise<void>((resolve) =>
+        setTimeout(() => {
+          // Fallback: force kill if pid is known
+          if (this.pid !== null) {
+            try {
+              process.kill(this.pid, 'SIGKILL');
+            } catch {
+              // Process may already be gone
+            }
+          }
+          resolve();
+        }, timeoutMs)
+      ),
+    ]);
   }
 
   /**
-   * Dispose the process manager.
-   * Cleans up in finally block (both success and error).
+   * Dispose the process manager, cleaning up all internal state.
    */
   public async dispose(): Promise<void> {
     try {
-      if (this.process !== null) {
-        await this.stop(1000);
-      }
+      await this.stop(1000);
     } finally {
-      this.process = null;
+      this.transport = null;
+      this.client = null;
       this.pid = null;
       this.startedAt = null;
     }

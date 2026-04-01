@@ -10,6 +10,7 @@ export interface MCPServerEntry {
   parallelismModel: 'single' | 'multiple';
   tags?: string[];
   description?: string;
+  spawnCommand?: string[];  // e.g. ["npx", "-y", "@playwright/mcp@latest"]
 }
 
 export interface MCPRegistry {

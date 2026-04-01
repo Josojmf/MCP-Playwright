@@ -9,6 +9,7 @@ export const MCP_REGISTRY: MCPRegistry = {
     parallelismModel: 'multiple',
     tags: ['aria', 'microsoft', 'stable'],
     description: 'Playwright MCP by Microsoft, uses ARIA snapshot mode',
+    spawnCommand: ['npx', '-y', '@playwright/mcp@latest'],
   },
   '@modelcontextprotocol/server-puppeteer': {
     id: '@modelcontextprotocol/server-puppeteer',
@@ -18,6 +19,7 @@ export const MCP_REGISTRY: MCPRegistry = {
     parallelismModel: 'multiple',
     tags: ['css-selectors', 'anthropic', 'stable'],
     description: 'Puppeteer MCP by Anthropic, uses CSS selector mode',
+    spawnCommand: ['npx', '-y', '@modelcontextprotocol/server-puppeteer@latest'],
   },
   // Stubs for Phase 4 — registered but not functional until then
   '@browserbasehq/mcp': {
@@ -29,6 +31,7 @@ export const MCP_REGISTRY: MCPRegistry = {
     requiresAuth: { envVar: 'BROWSERBASE_API_KEY', description: 'Browserbase cloud API key' },
     tags: ['cloud', 'browserbase'],
     description: 'Browserbase cloud MCP (Phase 4)',
+    // No spawnCommand — http transport, not stdio
   },
   'mcp-playwright': {
     id: 'mcp-playwright',
@@ -38,5 +41,6 @@ export const MCP_REGISTRY: MCPRegistry = {
     parallelismModel: 'multiple',
     tags: ['community', 'executeautomation'],
     description: 'Community Playwright MCP by ExecuteAutomation (Phase 4)',
+    spawnCommand: ['npx', '-y', 'mcp-playwright@latest'],
   },
 };
