@@ -335,6 +335,7 @@ Plans:
 1. Implement real vision LLM call in `validateStepWithVision()` — add `imageBuffer: Buffer` parameter; construct multimodal `LLMMessage` with `ContentPart[]`; call `provider.complete()` with `temperature: 0` and `response_format: json_object`; return structured verdict (VALID-07, VALID-03)
 2. Wire hallucination and `NEEDS_REVIEW` logic to real verdicts — update `StepValidation` model to store vision LLM response fields; assert hallucination only when Playwright passed + `contradicts` + `confidence > 0.7`; flag `NEEDS_REVIEW` when `confidence < 0.4` (VALID-04, VALID-05)
 3. Add auditor model uniqueness check + Browserbase startup sweep — validate at run-start that auditor model key ≠ orchestration model key; add startup sweep for orphaned Browserbase sessions in `McpProcessManager.initialize()` (VALID-06, EXEC-07)
+4. Fix runManager implementation divergences — correct inverted call policy (passed steps only), replace single auditorModel with two-tier fields (lowCostAuditorModel + highAccuracyAuditorModel), update model equality guard for both tiers (VALID-03, VALID-04, VALID-05, VALID-06, VALID-07)
 
 **Success Criteria**:
 1. `validateStepWithVision()` makes an outbound HTTP request to the vision LLM API (visible in network trace or server log) with a base64-encoded image payload.
