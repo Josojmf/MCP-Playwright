@@ -299,11 +299,11 @@
 
 **Requirements**: EXEC-03, CLI-01, INFRA-04, ORCH-07
 
-**Plans**:
-1. Implement real MCP stdio protocol in `McpProcessManager` — replace stub keep-alive with `@modelcontextprotocol/sdk` stdio transport; implement `initialize` handshake, `tools/list`, `tools/call`; health-check via capability negotiation; cleanup on completion and crash (EXEC-03)
-2. Replace mock CLI provider — remove `createCliProvider()` mock from `mcp-bench.ts`; call `createProvider(config)` factory with config loaded from env/file; verify real LLM responses flow through CLI path (CLI-01)
-3. Fix `LoopDetector` fingerprinting — change fingerprint input from Gherkin step text to MCP tool name + serialized arguments; update call sites in `OrchestratorService` (INFRA-04)
-4. Fix `runManager.estimateRun()` pricing — replace hardcoded `$1.5/$6 per 1M` with call to `adapter.estimateCost()` using the live pricing table or OpenRouter cache (ORCH-07)
+**Plans:** 2 plans
+
+Plans:
+- [ ] 08-01-PLAN.md — Registry spawnCommand + McpProcessManager rewrite + wiring into executeMcpRun (EXEC-03)
+- [ ] 08-02-PLAN.md — CLI real provider, LoopDetector fingerprint fix, estimateRun pricing fix (CLI-01, INFRA-04, ORCH-07)
 
 **Success Criteria**:
 1. Running a Gherkin scenario with `@playwright/mcp` selected causes actual browser actions to execute (navigations visible in a headed browser or in Playwright trace).
