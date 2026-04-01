@@ -5,7 +5,58 @@
 
 **Date:** 2026-04-01
 **Phase:** 09-real-vision-llm-validation
-**Areas discussed:** Contrato JSON del validador visual, Política de ejecución del auditor, Origen de imagen y flujo de llamada, Sweep de Browserbase al arranque
+**Areas discussed (original):** Contrato JSON del validador visual, Política de ejecución del auditor, Origen de imagen y flujo de llamada, Sweep de Browserbase al arranque
+
+---
+
+## Update Session (2026-04-01) — Implementation vs Context Divergence Review
+
+Phase 9 was already executed (3/3 plans, 125/125 tests). This session compared the original CONTEXT.md to the actual implementation and resolved 3 divergences.
+
+### Validation Call Policy
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Bug — should validate PASSED steps | Hallucination detection requires validating passed-claimed steps. Fix runManager condition. | ✓ |
+| Intentional cost trade-off | Skip LLM for passed steps, only validate failures. | |
+| Intentional — flip the logic | Validate PASSED steps only; failed steps are deterministic. | |
+
+**User's choice:** Bug — should validate PASSED steps
+
+**Notes:** runManager line ~547 has inverted condition (`!== "passed"`). The fix is `=== "passed"`. Hallucination detection must target passed steps to catch MCPs that falsely claim success.
+
+---
+
+### Tiered Model Config
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Expose both in RunConfig | Add lowCostAuditorModel + highAccuracyAuditorModel to RunConfig. | ✓ |
+| Keep single auditorModel | Use auditorModel as high-tier; hardcode gpt-4.1-mini as low-tier. | |
+
+**User's choice:** Expose both in RunConfig
+
+**Follow-up — existing auditorModel field:**
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Remove it | Breaking change: replace with two fields. Cleaner API. | ✓ |
+| Keep as alias | Backwards compatible alias for highAccuracyAuditorModel. | |
+
+**User's choice:** Remove auditorModel entirely.
+
+---
+
+### StepValidation.tier Field
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Store only | Persist for debugging, not in scorecard UI. | |
+| Store + expose in scorecard | Show "HIGH" badge on escalated verdicts in scorecard. | ✓ |
+
+**User's choice:** Store + expose in scorecard
+
+---
 
 ---
 

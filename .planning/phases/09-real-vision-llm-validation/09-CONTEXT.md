@@ -8,7 +8,7 @@
 
 Replace the heuristic-only `validateStepWithVision()` with a real async LLM API call that sends the captured screenshot to a vision model and uses its JSON verdict for hallucination detection, `NEEDS_REVIEW` flags, and tiered escalation. Adds Browserbase orphaned-session sweep at server startup.
 
-No new MCPs, no UI changes, no new run lifecycle events — pure validation pipeline upgrade.
+No new MCPs, no UI changes beyond scorecard tier badge — pure validation pipeline upgrade.
 
 </domain>
 
@@ -39,19 +39,33 @@ No new MCPs, no UI changes, no new run lifecycle events — pure validation pipe
 
 ### Async signature and call site
 
-- **D-04:** `validateStepWithVision()` becomes `async` and gains an `imageBuffer: Buffer` parameter and a `provider: LLMProvider` parameter. Signature change:
+- **D-04:** `validateStepWithVision()` becomes `async` and gains an `imageBuffer?: Buffer` parameter (optional — safe fallback when absent), `provider: LLMProvider`, and `orchestratorModel: string`. Signature:
   ```ts
+  export interface VisionValidationInput {
+    stepStatus: "passed" | "failed" | "aborted";
+    stepText: string;
+    imageBuffer?: Buffer;
+    provider: LLMProvider;
+    orchestratorModel: string;
+    lowCostAuditorModel?: string;   // defaults to "gpt-4.1-mini"
+    highAccuracyAuditorModel?: string; // defaults to "gpt-4.1"
+  }
   async function validateStepWithVision(input: VisionValidationInput): Promise<StepValidation>
-  // where VisionValidationInput adds:
-  //   imageBuffer: Buffer
-  //   provider: LLMProvider
   ```
 
-- **D-05:** The call site in `runManager.ts` (`~line 498`) `await`s the call inline, blocking step processing until the vision result is available. No fire-and-forget. Simpler flow; step result includes validation synchronously before persist.
+- **D-05:** The call site in `runManager.ts` `await`s the call for **PASSED steps only**. Passed steps are the hallucination-detection target — the LLM checks whether a step the MCP claimed passed actually succeeded. Failed/aborted steps get a deterministic verdict without an LLM call.
+
+  ```ts
+  if (normalizedStepStatus === "passed" && screenshotPath) {
+    // build provider, call validateStepWithVision
+  } else {
+    // deterministic result for failed/aborted — no LLM call
+  }
+  ```
 
 - **D-06:** If `stepStatus` is `'failed'` or `'aborted'`, skip the LLM call entirely and return a deterministic result immediately. No network call for already-failed steps:
   ```ts
-  if (input.stepStatus !== 'passed') {
+  if (input.stepStatus !== "passed") {
     return {
       verdict: 'contradicts', confidence: 0.95,
       needsReview: false, hallucinated: false,
@@ -62,17 +76,31 @@ No new MCPs, no UI changes, no new run lifecycle events — pure validation pipe
 
 ### Vision provider configuration
 
-- **D-07:** `runManager.ts` builds a single `auditorProvider` instance via `createProvider()` at run start, using the **same provider** as the orchestrator but a different model key. The `auditorProvider` is passed down to `validateStepWithVision()` as a plain `LLMProvider` instance.
+- **D-07:** `runManager.ts` builds a single `auditorProvider` instance via `createProvider()` at the validation call site, using the same provider as the orchestrator but with the auditor model key.
 
-- **D-08:** `RunConfig` (or equivalent config type) gains one new field: `auditorModel?: string`. No `auditorProvider` field — the provider is always the same as the orchestrator provider. Multi-provider flexibility exists only at the orchestrator level.
+- **D-08:** `RunConfig` gains **two** auditor model fields (the previous single `auditorModel` field is removed):
+  - `lowCostAuditorModel?: string` — default `"gpt-4.1-mini"`
+  - `highAccuracyAuditorModel?: string` — default `"gpt-4.1"`
+  RunManager passes both to `VisionValidationInput`. The provider type is always the same as the orchestrator provider.
 
-- **D-09:** Default `auditorModel` when not configured: `"gpt-4.1"`.
+- **D-09:** Default auditor models when not configured: `"gpt-4.1-mini"` (low tier), `"gpt-4.1"` (high tier).
 
-- **D-10:** Run-start validation (from VALID-06): throw an error before execution if `config.auditorModel === config.model` (auditor model key equals orchestrator model key). Error message must name both values.
+- **D-10:** Run-start validation: throw an error before execution if either auditor model key equals the orchestrator model key. Error message must name both values. Applies to both `lowCostAuditorModel` and `highAccuracyAuditorModel`.
+
+### Tiered escalation
+
+- **D-11-TIER:** Two-tier evaluation strategy:
+  - **Low tier** (`lowCostAuditorModel`, default `gpt-4.1-mini`): always runs first for passed steps.
+  - **High tier** (`highAccuracyAuditorModel`, default `gpt-4.1`): escalates only when low tier returns `verdict === "contradicts"` AND `confidence > 0.8`.
+  - Escalation threshold: `confidence > 0.8`.
+
+- **D-12-TIER:** `StepValidation.tier: "low" | "high"` records which evaluation tier produced the final verdict. A `"high"` tier value means the low tier escalated. This field is:
+  - Persisted in the `StepValidation` record.
+  - Surfaced in the scorecard UI as a `"HIGH"` badge on escalated verdicts, giving visibility into which steps triggered expensive high-accuracy calls.
 
 ### Vision LLM failure mode
 
-- **D-11:** Vision LLM call errors (network, rate limit, malformed JSON) are caught inside `validateStepWithVision()`. On error, return:
+- **D-13:** Vision LLM call errors (network, rate limit, malformed JSON) are caught inside `validateStepWithVision()`. On error, return:
   ```ts
   {
     verdict: 'uncertain', confidence: 0.2,
@@ -82,28 +110,33 @@ No new MCPs, no UI changes, no new run lifecycle events — pure validation pipe
   ```
   The run continues. The step is flagged for human review but not marked hallucinated.
 
-- **D-12:** On success, `rationale` is populated from the model's own rationale text in the JSON response. On failure, rationale is `\`Vision LLM error: ${err.message}\``.
+- **D-14:** On success, `rationale` is populated from the model's own rationale text in the JSON response. On failure, rationale is `` `Vision LLM error: ${err.message}` ``.
 
-- **D-13:** The vision LLM response must be valid JSON matching the verdict schema. If the response is not parseable JSON, treat it as an error (D-11 path). Do not attempt text parsing of unstructured model output.
+- **D-15:** The vision LLM response must be valid JSON matching the verdict schema. If the response is not parseable JSON, treat it as an error (D-13 path). Do not attempt text parsing of unstructured model output.
 
 ### Browserbase orphaned-session sweep
 
-- **D-14:** The sweep runs once at **server startup only** (in `server/index.ts` during initialization, or in a dedicated `McpProcessManager.initialize()` hook). No per-run sweep.
+- **D-16:** The sweep runs once at **server startup only** (in `server/index.ts` during initialization). No per-run sweep.
 
-- **D-15:** If `BROWSERBASE_API_KEY` is absent, skip silently with a debug-level log. No warning, no error. Most users don't use Browserbase.
+- **D-17:** If `BROWSERBASE_API_KEY` is absent, skip silently with a debug-level log. No warning, no error. Most users don't use Browserbase.
 
-- **D-16:** Sweep uses Browserbase REST API directly via `fetch()` — no SDK dependency:
+- **D-18:** Sweep uses Browserbase REST API directly via `fetch()` — no SDK dependency:
   ```
   GET  https://api.browserbase.com/v1/sessions?status=RUNNING
        X-BB-API-Key: ${BROWSERBASE_API_KEY}
   DELETE https://api.browserbase.com/v1/sessions/:id
          X-BB-API-Key: ${BROWSERBASE_API_KEY}
   ```
-  List all `RUNNING` sessions, then DELETE each. Log the count of sessions swept at info level.
+  List all `RUNNING` sessions, then DELETE each. Log counts of sessions swept at info level.
 
-### Decisions from discuss-phase update (2026-04-01)
+- **D-19:** Browserbase startup sweep is **best-effort resilient**:
+  - Never block server startup because of sweep/list/delete failures.
+  - Log summary counts (`found`, `deleted`, `failed`) at startup.
+  - Log per-session delete failures at warn level.
 
-- **D-17:** Vision auditor response uses an **extended strict JSON contract**. Required fields from model response:
+### Vision auditor response contract
+
+- **D-20:** Vision auditor response uses an **extended strict JSON contract**. Required fields from model response:
   - `verdict` (`matches | contradicts | uncertain`)
   - `confidence` (number)
   - `rationale` (string)
@@ -111,19 +144,20 @@ No new MCPs, no UI changes, no new run lifecycle events — pure validation pipe
   - `hallucinated` (boolean)
   Any invalid or non-JSON response is treated as controlled error path (`uncertain`, low confidence, `needsReview: true`).
 
-- **D-18:** Auditor execution policy is **deterministic where provider supports it**:
+- **D-21:** Auditor execution policy is **deterministic where provider supports it**:
   - OpenAI/OpenRouter/Azure: force deterministic settings and structured JSON output.
   - Claude: enforce strict JSON via prompt contract and strict parser validation.
   - In all providers, malformed output follows the same error fallback path.
 
-- **D-19:** If screenshot read fails when building `imageBuffer`, use **safe fallback and continue run**:
+- **D-22:** If screenshot read fails when building `imageBuffer`, use **safe fallback and continue run**:
   - Do not fail the technical step only because visual evidence cannot be loaded.
   - Return `uncertain`, low confidence, `needsReview: true`, `hallucinated: false`.
 
-- **D-20:** Browserbase startup sweep is **best-effort resilient**:
-  - Never block server startup because of sweep/list/delete failures.
-  - Log summary counts (`found`, `deleted`, `failed`) at startup.
-  - Log per-session delete failures at warn level.
+### Hallucination finalization
+
+- **D-23:** `finalizeValidation()` computes final `needsReview` and `hallucinated` as local guard-rail overrides on top of model-reported values:
+  - `needsReview = validation.confidence < 0.4 || validation.verdict === "uncertain"`
+  - `hallucinated = stepStatus === "passed" && verdict === "contradicts" && confidence > 0.7`
 
 ### Claude's Discretion
 - Vision LLM system prompt wording and JSON schema for the verdict response
@@ -135,11 +169,14 @@ No new MCPs, no UI changes, no new run lifecycle events — pure validation pipe
 <specifics>
 ## Specific Ideas
 
-- "The model is going to be always from the same provider (azure openai, openrouter...) the multiplatform support is only for flexibility" — auditorModel only; auditorProvider is not a separate config field
-- Default auditor model is `gpt-4.1` (user-specified)
+- "The model is going to be always from the same provider (azure openai, openrouter...) the multiplatform support is only for flexibility" — auditor uses same provider as orchestrator; only model key differs
+- Default auditor models: `gpt-4.1-mini` (low tier) and `gpt-4.1` (high tier) — user-specified
 - Failed/aborted steps get a deterministic result without any LLM call — keeps cost low and avoids misleading vision analysis on already-certain outcomes
-- Extended strict JSON contract selected by user to reduce ambiguous audit outcomes across providers
+- Vision validation targets PASSED steps — detecting MCPs that claim success but screenshots show failure is the core anti-hallucination use case
+- Tiered escalation: only escalate to expensive high-accuracy model when low tier is highly confident in a contradiction (>0.8)
+- Extended strict JSON contract selected to reduce ambiguous audit outcomes across providers
 - Browserbase sweep policy chosen as resilient best-effort (non-blocking startup)
+- `StepValidation.tier` badge in scorecard gives cost/quality visibility to users
 
 </specifics>
 
@@ -149,22 +186,23 @@ No new MCPs, no UI changes, no new run lifecycle events — pure validation pipe
 **Downstream agents MUST read these before planning or implementing.**
 
 ### Vision validator
-- `src/server/validation/visionValidator.ts` — Current sync heuristic implementation; this phase rewrites it to async with real LLM calls
-- `src/server/validation/visionValidator.test.ts` — Existing tests; must be updated to mock the injected provider
+- `src/server/validation/visionValidator.ts` — Current async LLM implementation with tiered escalation; this is the authoritative source for validation logic
+- `src/server/validation/visionValidator.test.ts` — Existing tests; must be updated to reflect corrected call policy (passed steps only) and two-model config
 
 ### LLM types and adapters
-- `src/shared/llm/types.ts` — `LLMMessage.content` changes from `string` to `string | ContentPart[]`; `ContentPart` type added here
+- `src/shared/llm/types.ts` — `LLMMessage.content` is `string | ContentPart[]`; `ContentPart` type defined here
 - `src/shared/llm/adapters/openrouter.ts` — Adapter that handles `ContentPart[]` content natively (OpenAI-compatible)
 - `src/shared/llm/adapters/openai.ts` — Same as OpenRouter adapter pattern
 - `src/shared/llm/adapters/azure.ts` — Same as OpenRouter adapter pattern
-- `src/shared/llm/adapters/claude.ts` — Must translate `ContentPart[]` to Anthropic's native image format internally
+- `src/shared/llm/adapters/claude.ts` — Translates `ContentPart[]` to Anthropic's native image format internally
 
 ### Run manager call site
-- `src/server/runManager.ts` lines 498–503 — Current sync `validateStepWithVision()` call; becomes `await validateStepWithVision(...)` with `imageBuffer` and `provider` params
-- `src/server/runManager.ts` lines 80–100 — RunConfig / session setup where `auditorModel` config is read and `auditorProvider` is built
+- `src/server/runManager.ts` lines ~540–596 — Vision validation call site; **BUG**: currently calls for `normalizedStepStatus !== "passed"`; must be corrected to call for `normalizedStepStatus === "passed"` only
+- `src/server/runManager.ts` lines ~50–55 — `RunConfig` interface; `auditorModel` field must be replaced with `lowCostAuditorModel` and `highAccuracyAuditorModel`
+- `src/server/runManager.ts` lines ~175–182 — Model equality guard at run-start; must be updated to validate both tier models against orchestratorModel
 
 ### Registry and startup
-- `src/server/index.ts` — Server startup; location for Browserbase orphan sweep call
+- `src/server/index.ts` — Server startup; location for Browserbase orphan sweep call (`sweepBrowserbaseOrphanSessions`)
 - `src/shared/registry/index.ts` — `@browserbasehq/mcp` entry; confirms HTTP transport and `BROWSERBASE_API_KEY` env var
 
 ### Requirements mapping
@@ -177,22 +215,23 @@ No new MCPs, no UI changes, no new run lifecycle events — pure validation pipe
 ## Existing Code Insights
 
 ### Current state of visionValidator.ts
-- Pure sync function, no `imageBuffer` param, no LLM calls — all heuristics on `stepText` and `stepStatus`
-- `StepValidation` interface already has `auditorModel`, `verdict`, `confidence`, `needsReview`, `hallucinated`, `rationale` — correct shape, no additions needed
-- `VisionValidationInput` needs two new fields: `imageBuffer: Buffer` and `provider: LLMProvider`
+- Async function with full tiered escalation implemented: low-tier always runs; high-tier escalates when contradicts + confidence > 0.8
+- `VisionValidationInput` has `lowCostAuditorModel?: string` and `highAccuracyAuditorModel?: string` optional fields (defaults to `gpt-4.1-mini` / `gpt-4.1` internally)
+- `StepValidation` has `tier: VisionTier` field (`"low" | "high"`) recording which tier produced the verdict
+- `finalizeValidation()` applies guard-rail overrides for `needsReview` and `hallucinated`
+
+### RunManager — current bug
+- Line ~547: `if (normalizedStepStatus !== "passed" && screenshotPath)` — **inverted logic**; should be `=== "passed"`
+- `RunConfig.auditorModel` is the single field currently; must become two fields: `lowCostAuditorModel` + `highAccuracyAuditorModel`
+- Equality guard at ~line 175 only checks `auditorModel`; must check both tier models
 
 ### LLM adapter patterns
-- All adapters import `{ estimateCostUsd, resolvePricing }` from `../../pricing/resolver`
 - All adapters call `provider.complete(request: LLMRequest)` — adding image to `LLMMessage.content` flows through existing `complete()` path
-- `ClaudeAdapter` already handles special message formatting (system prompt extraction) — will also handle image format translation
-
-### Run manager integration points
-- `runManager.ts:498` — `validateStepWithVision()` call; add `await` + new params
-- `runManager.ts:~15` — Import `validateStepWithVision` already present; `createProvider` import already present
-- `screenshotId` / `screenshotPath` are already computed before the validator call (line ~490); `imageBuffer` will be read from disk at the same point
+- `ClaudeAdapter` handles special message formatting; handles image format translation to Anthropic's native format
 
 ### Browserbase
-- HTTP transport — no `McpProcessManager` involved; sweep is a standalone async function
+- `sweepBrowserbaseOrphanSessions()` already implemented in `server/index.ts` as a standalone async function
+- HTTP transport — no `McpProcessManager` involved
 - `BROWSERBASE_API_KEY` env var already referenced in `src/shared/registry/index.ts`
 
 </code_context>
@@ -207,4 +246,4 @@ None — discussion stayed within phase scope.
 ---
 
 *Phase: 09-real-vision-llm-validation*
-*Context gathered: 2026-04-01*
+*Context gathered: 2026-04-01 (updated — reflects actual implementation and bug fix decisions)*
