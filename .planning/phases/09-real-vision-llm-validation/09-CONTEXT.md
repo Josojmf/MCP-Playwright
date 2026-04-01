@@ -101,12 +101,34 @@ No new MCPs, no UI changes, no new run lifecycle events — pure validation pipe
   ```
   List all `RUNNING` sessions, then DELETE each. Log the count of sessions swept at info level.
 
+### Decisions from discuss-phase update (2026-04-01)
+
+- **D-17:** Vision auditor response uses an **extended strict JSON contract**. Required fields from model response:
+  - `verdict` (`matches | contradicts | uncertain`)
+  - `confidence` (number)
+  - `rationale` (string)
+  - `needsReview` (boolean)
+  - `hallucinated` (boolean)
+  Any invalid or non-JSON response is treated as controlled error path (`uncertain`, low confidence, `needsReview: true`).
+
+- **D-18:** Auditor execution policy is **deterministic where provider supports it**:
+  - OpenAI/OpenRouter/Azure: force deterministic settings and structured JSON output.
+  - Claude: enforce strict JSON via prompt contract and strict parser validation.
+  - In all providers, malformed output follows the same error fallback path.
+
+- **D-19:** If screenshot read fails when building `imageBuffer`, use **safe fallback and continue run**:
+  - Do not fail the technical step only because visual evidence cannot be loaded.
+  - Return `uncertain`, low confidence, `needsReview: true`, `hallucinated: false`.
+
+- **D-20:** Browserbase startup sweep is **best-effort resilient**:
+  - Never block server startup because of sweep/list/delete failures.
+  - Log summary counts (`found`, `deleted`, `failed`) at startup.
+  - Log per-session delete failures at warn level.
+
 ### Claude's Discretion
 - Vision LLM system prompt wording and JSON schema for the verdict response
-- Whether to use `response_format: { type: 'json_object' }` or structured output via function calling
-- Whether `temperature: 0` applies to all providers or only OpenAI-compatible ones
-- How many tokens to allocate for the vision LLM response (`maxTokens` in LLMRequest)
-- Whether the Browserbase sweep DELETE errors are swallowed or logged at warn level
+- How many tokens to allocate for the vision LLM response (`maxTokens` in `LLMRequest`)
+- Whether `needsReview` and `hallucinated` are stored both as model-reported and locally-recomputed guard-rail fields (implementation detail)
 
 </decisions>
 
@@ -116,6 +138,8 @@ No new MCPs, no UI changes, no new run lifecycle events — pure validation pipe
 - "The model is going to be always from the same provider (azure openai, openrouter...) the multiplatform support is only for flexibility" — auditorModel only; auditorProvider is not a separate config field
 - Default auditor model is `gpt-4.1` (user-specified)
 - Failed/aborted steps get a deterministic result without any LLM call — keeps cost low and avoids misleading vision analysis on already-certain outcomes
+- Extended strict JSON contract selected by user to reduce ambiguous audit outcomes across providers
+- Browserbase sweep policy chosen as resilient best-effort (non-blocking startup)
 
 </specifics>
 
