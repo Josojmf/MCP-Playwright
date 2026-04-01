@@ -26,7 +26,8 @@ export interface RunEstimateRequest {
   tokenCap: number;
   provider: string;   // e.g. "openai", "claude", "azure", "openrouter"
   model?: string;     // optional; "default" used as fallback
-  auditorModel?: string; // optional auditor model for vision validation; defaults to gpt-4.1
+  lowCostAuditorModel?: string;      // default "gpt-4.1-mini"
+  highAccuracyAuditorModel?: string;  // default "gpt-4.1"
 }
 
 export interface RunEstimate {
@@ -52,7 +53,8 @@ interface RunConfig {
   selectedMcpIds: string[];
   tokenCap: number;
   orchestratorModel?: string;
-  auditorModel?: string;
+  lowCostAuditorModel?: string;      // default "gpt-4.1-mini"
+  highAccuracyAuditorModel?: string;  // default "gpt-4.1"
   providerType?: "openai" | "claude" | "azure" | "openrouter"; // LLM provider for orchestrator
 }
 
@@ -170,14 +172,20 @@ export class PhaseOneRunManager {
 
     // Extract orchestrator model (the actual LLM model for running the scenario)
     const orchestratorModel = normalizedInput.model || "default";
-    
-    // Extract auditor model (for vision validation), default to gpt-4.1
-    const auditorModel = normalizedInput.auditorModel || "gpt-4.1";
 
-    // Guard: auditor and orchestrator models cannot be the same
-    if (auditorModel === orchestratorModel) {
+    // Extract two-tier auditor models (for vision validation), with defaults
+    const lowCostAuditorModel = normalizedInput.lowCostAuditorModel || "gpt-4.1-mini";
+    const highAccuracyAuditorModel = normalizedInput.highAccuracyAuditorModel || "gpt-4.1";
+
+    // Guard: neither auditor tier model can equal the orchestrator model
+    if (lowCostAuditorModel === orchestratorModel) {
       throw new RequestValidationError(
-        `Los modelos auditor y orchestrator no pueden ser iguales (ambos: ${orchestratorModel}). Usa diferentes modelos para garantizar verdicts imparciales.`
+        `Low-cost auditor model and orchestrator model must differ: both are '${orchestratorModel}'.`
+      );
+    }
+    if (highAccuracyAuditorModel === orchestratorModel) {
+      throw new RequestValidationError(
+        `High-accuracy auditor model and orchestrator model must differ: both are '${orchestratorModel}'.`
       );
     }
 
@@ -213,7 +221,8 @@ export class PhaseOneRunManager {
         selectedMcpIds: normalizedInput.selectedMcpIds,
         tokenCap: normalizedInput.tokenCap,
         orchestratorModel,
-        auditorModel,
+        lowCostAuditorModel,
+        highAccuracyAuditorModel,
         providerType,
       },
       plan,
@@ -543,13 +552,13 @@ export class PhaseOneRunManager {
     let validation: StepValidation;
     
     try {
-      // Only validate failed/uncertain steps to save costs
-      if (normalizedStepStatus !== "passed" && screenshotPath) {
-        // Build auditorProvider from config
+      // D-05/D-06: Only validate PASSED steps via vision LLM; failed/aborted get deterministic result
+      if (normalizedStepStatus === "passed" && screenshotPath) {
+        // Build auditorProvider from config using low-cost model for initial construction
         const providerType = session.config.providerType ?? "openai";
         const auditorProvider = await createProvider({
           provider: providerType,
-          model: session.config.auditorModel ?? "gpt-4.1",
+          model: session.config.lowCostAuditorModel ?? "gpt-4.1-mini",
         });
 
         // Read screenshot buffer
@@ -561,31 +570,47 @@ export class PhaseOneRunManager {
           // Fall through with undefined buffer - validator will handle it
         }
 
-        // Call async validator with multimodal context
+        // Call async validator with multimodal context and both tier model keys
         validation = await validateStepWithVision({
           imageBuffer,
           provider: auditorProvider,
           stepStatus: normalizedStepStatus,
           stepText: stepResult.stepText,
           orchestratorModel: session.config.orchestratorModel ?? "gpt-4o",
+          lowCostAuditorModel: session.config.lowCostAuditorModel,
+          highAccuracyAuditorModel: session.config.highAccuracyAuditorModel,
         });
       } else {
-        // Passed steps or no screenshot: simple verdict without LLM call
-        validation = {
-          auditorModel: session.config.auditorModel ?? "gpt-4.1",
-          tier: "low",
-          verdict: normalizedStepStatus === "passed" ? "matches" : "contradicts",
-          confidence: normalizedStepStatus === "passed" ? 0.95 : 0.5,
-          needsReview: false,
-          hallucinated: false,
-          rationale: normalizedStepStatus === "passed" ? "Passed step presumed correct" : "Failed step but no screenshot for LLM review",
-        };
+        // D-06: Failed/aborted steps get deterministic verdict without LLM call
+        // Passed steps without screenshot get uncertain verdict
+        if (normalizedStepStatus !== "passed") {
+          validation = {
+            auditorModel: session.config.lowCostAuditorModel ?? "gpt-4.1-mini",
+            tier: "low",
+            verdict: "contradicts",
+            confidence: 0.95,
+            needsReview: false,
+            hallucinated: false,
+            rationale: "Technical step result indicates failure or abort.",
+          };
+        } else {
+          // Passed step but no screenshot
+          validation = {
+            auditorModel: session.config.lowCostAuditorModel ?? "gpt-4.1-mini",
+            tier: "low",
+            verdict: "uncertain",
+            confidence: 0.2,
+            needsReview: true,
+            hallucinated: false,
+            rationale: "No screenshot available for vision validation.",
+          };
+        }
       }
     } catch (err) {
       // Fallback if validation throws - don't let validator errors break the run
       this.logger.warn({ err, stepId: stepResult.stepId }, "Async validator error - using fallback");
       validation = {
-        auditorModel: session.config.auditorModel ?? "gpt-4.1",
+        auditorModel: session.config.lowCostAuditorModel ?? "gpt-4.1-mini",
         tier: "low",
         verdict: "uncertain",
         confidence: 0.2,

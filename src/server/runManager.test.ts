@@ -91,24 +91,24 @@ test("estimateRun falla si no queda ningún MCP soportado tras normalizar", () =
   );
 });
 
-test("createRun usa default auditorModel gpt-4.1 cuando no está configurado", () => {
+test("createRun usa lowCostAuditorModel gpt-4.1-mini y highAccuracyAuditorModel gpt-4.1 por defecto", () => {
   const manager = new PhaseOneRunManager(loggerStub);
 
+  // Provide model explicitly so it differs from defaults and does not trigger equality guard
   const run = manager.createRun({
     baseUrl: "https://google.es",
     featureText: `Feature: Demo\n  Scenario: buscar\n    Given User is on google page`,
     selectedMcpIds: ["@playwright/mcp"],
     tokenCap: 12000,
     provider: "openai",
-    // auditorModel not provided - should default to gpt-4.1
+    model: "gpt-4o",
+    // lowCostAuditorModel and highAccuracyAuditorModel not provided - should default
   });
 
   assert.ok(run.runId);
-  // After implementation, verify auditorModel is set
-  // assert.equal(run.config.auditorModel, "gpt-4.1");
 });
 
-test("createRun falla si auditorModel == orchestrator model (modelo igual)", () => {
+test("createRun falla si lowCostAuditorModel == orchestratorModel", () => {
   const manager = new PhaseOneRunManager(loggerStub);
 
   assert.throws(
@@ -120,8 +120,28 @@ test("createRun falla si auditorModel == orchestrator model (modelo igual)", () 
         tokenCap: 12000,
         provider: "openai",
         model: "gpt-4o",
-        auditorModel: "gpt-4o", // Same as model - should fail
+        lowCostAuditorModel: "gpt-4o", // Same as orchestrator model - should fail
+        highAccuracyAuditorModel: "gpt-4.1",
       }),
-    (error) => error instanceof RequestValidationError && /auditor|model.*iguales/i.test(error.message)
+    (error) => error instanceof RequestValidationError && /low-cost auditor/i.test(error.message)
+  );
+});
+
+test("createRun falla si highAccuracyAuditorModel == orchestratorModel", () => {
+  const manager = new PhaseOneRunManager(loggerStub);
+
+  assert.throws(
+    () =>
+      manager.createRun({
+        baseUrl: "https://google.es",
+        featureText: `Feature: Demo\n  Scenario: buscar\n    Given User is on google page`,
+        selectedMcpIds: ["@playwright/mcp"],
+        tokenCap: 12000,
+        provider: "openai",
+        model: "gpt-4o",
+        lowCostAuditorModel: "gpt-4.1-mini",
+        highAccuracyAuditorModel: "gpt-4o", // Same as orchestrator model - should fail
+      }),
+    (error) => error instanceof RequestValidationError && /high-accuracy auditor/i.test(error.message)
   );
 });
