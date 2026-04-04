@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Executing Phase 11
-stopped_at: Completed 11-03-PLAN.md — live run surface takeover and ResizeObserver guard
-last_updated: "2026-04-04T10:51:03.945Z"
+stopped_at: Completed 11-04-PLAN.md — screenshot lightbox modal fix
+last_updated: "2026-04-04T10:54:06.129Z"
 progress:
   total_phases: 11
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 21
-  completed_plans: 28
+  completed_plans: 29
 ---
 
 # Project State
@@ -54,6 +54,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 - [Phase 09]: Two-tier auditor model fields (lowCostAuditorModel + highAccuracyAuditorModel) replace single auditorModel in RunConfig; vision LLM called for passed steps only per D-05/D-08/D-10
 - [Phase 11-03]: Three-branch runState render in App.tsx: running gets dedicated live surface viewport, pre-run layout is fully hidden, post-run shows scorecard
 - [Phase 11-03]: McpColumnGrid ResizeObserver guarded with typeof check + try/catch; fallback width seed from getBoundingClientRect() ensures grid vs tabs is deterministic without observer
+- [Phase 11]: Use shared DialogContent anatomy for ScreenshotLightbox; add overlayClassName prop to DialogContent for dark non-blurred overlay override
 
 ## Metrics
 
@@ -94,8 +95,8 @@ Recommended next action: run manual UI/UAT checks against the live run screen an
 
 ## Session Continuity
 
-- **Last session:** 2026-04-04T10:51:03.940Z
-- **Stopped at:** Completed 11-03-PLAN.md — live run surface takeover and ResizeObserver guard
+- **Last session:** 2026-04-04T10:54:06.123Z
+- **Stopped at:** Completed 11-04-PLAN.md — screenshot lightbox modal fix
 - **Resume file:** None
 
 ## Phase 09 Execution Details

@@ -471,7 +471,7 @@ Plans:
 
 **Requirements**: UI-04, UI-05, UI-06, UI-07
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 - [x] 11-01-PLAN.md — Grid de columnas por MCP con screenshot siempre visible, modal lightbox y marcado visual de pasos `HALLUCINATED` / `NEEDS REVIEW`

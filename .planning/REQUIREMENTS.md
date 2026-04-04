@@ -71,7 +71,7 @@
 - [ ] **UI-03**: Pre-run cost estimate displayed before execution starts; user confirms within budget
 - [x] **UI-04**: Live run view: per-MCP step progress streams in real time via SSE; each step shows status (running / passed / failed / hallucinated / needs-review)
 - [x] **UI-05**: Full scorecard after run: metrics table (step pass rate, tokens, cost, latency, hallucination rate per MCP) + step-by-step replay with screenshots
-- [ ] **UI-06**: Screenshot thumbnails in live feed; full-res on demand via REST endpoint (JPEG compressed)
+- [x] **UI-06**: Screenshot thumbnails in live feed; full-res on demand via REST endpoint (JPEG compressed)
 - [x] **UI-07**: Suspicious step visual flag in scorecard for human review (LLM vs Playwright verdict divergence)
 - [ ] **UI-08**: Technical + polished visual design — dark/light mode, data-dense tables and charts, PostHog/Datadog aesthetic; built with React + Tailwind + shadcn/ui; zero vibe-coded components
 - [ ] **UI-09**: Responsive layout for desktop (1280px+ primary target)
@@ -174,7 +174,7 @@
 | UI-03 | Phase 3 | Pending |
 | UI-04 | Phase 3 | Complete |
 | UI-05 | Phase 5 | Complete |
-| UI-06 | Phase 5 | Pending |
+| UI-06 | Phase 5 | Complete |
 | UI-07 | Phase 5 | Complete |
 | UI-08 | Phase 1 | Pending |
 | UI-09 | Phase 1 | Pending |
