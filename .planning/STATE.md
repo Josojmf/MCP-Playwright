@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Phase 11 executed; verification pending
-stopped_at: Phase 11 code execution complete; summaries written and manual verification passed
-last_updated: "2026-04-02T12:30:00.000Z"
+status: Executing Phase 11
+stopped_at: Completed 11-03-PLAN.md — live run surface takeover and ResizeObserver guard
+last_updated: "2026-04-04T10:51:03.945Z"
 progress:
   total_phases: 11
   completed_phases: 5
-  total_plans: 19
-  completed_plans: 25
+  total_plans: 21
+  completed_plans: 28
 ---
 
 # Project State
@@ -52,6 +52,8 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 - [Phase 07-04]: Stale-ref errors annotate step message with [STALE-REF] prefix and skip benchmark failure counting; run-level catch also traces stale-ref via traceStaleRefRecovery()
 - [Phase 08-real-mcp-process-protocol]: McpProcessManager implements BaseMcpClient using @modelcontextprotocol/sdk Client + StdioClientTransport; registry-driven spawnCommand; health check via successful initialize handshake
 - [Phase 09]: Two-tier auditor model fields (lowCostAuditorModel + highAccuracyAuditorModel) replace single auditorModel in RunConfig; vision LLM called for passed steps only per D-05/D-08/D-10
+- [Phase 11-03]: Three-branch runState render in App.tsx: running gets dedicated live surface viewport, pre-run layout is fully hidden, post-run shows scorecard
+- [Phase 11-03]: McpColumnGrid ResizeObserver guarded with typeof check + try/catch; fallback width seed from getBoundingClientRect() ensures grid vs tabs is deterministic without observer
 
 ## Metrics
 
@@ -92,8 +94,8 @@ Recommended next action: run manual UI/UAT checks against the live run screen an
 
 ## Session Continuity
 
-- **Last session:** 2026-04-02T13:47:37.2979542+02:00
-- **Stopped at:** Session resumed; Phase 11 confirmed as planned and ready to execute
+- **Last session:** 2026-04-04T10:51:03.940Z
+- **Stopped at:** Completed 11-03-PLAN.md — live run surface takeover and ResizeObserver guard
 - **Resume file:** None
 
 ## Phase 09 Execution Details
