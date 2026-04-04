@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Phase 13 in progress; 13-01 and 13-02 complete
-stopped_at: Completed 13-02-PLAN.md
-last_updated: "2026-04-04T22:04:45.868Z"
+status: Phase 13 in progress; 13-01, 13-02, and 13-04 complete
+stopped_at: Completed 13-04-PLAN.md
+last_updated: "2026-04-04T22:07:01.183Z"
 progress:
   total_phases: 13
   completed_phases: 7
   total_plans: 29
-  completed_plans: 35
+  completed_plans: 36
 ---
 
 # Project State
@@ -39,7 +39,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 - [x] Phase 10 completed
 - [x] Phase 11 completed
 - [x] Phase 12 completed
-- [~] Phase 13 in progress (`13-01` and `13-02` complete, `13-03` to `13-04` pending)
+- [~] Phase 13 in progress (`13-01`, `13-02`, and `13-04` complete; `13-03` pending)
 
 ## Decisions
 
@@ -59,6 +59,8 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 - [Phase 13]: Route test, test:fast, test:smoke, and test:ci through one lane runner so lane policy stays centralized.
 - [Phase 13]: Source-shape contracts now default to AST-backed object and JSX assertions; normalized string checks are reserved for formatting-heavy CLI output.
 - [Phase 13]: UI contract coverage keeps execution-config and trust-state data-flow seams, while literal label checks were removed per D-02 and D-03.
+- [Phase 13]: Smoke tests activate their runtime after switching into an isolated temp workspace so sqlite.ts binds its .data path to the harnessed cwd.
+- [Phase 13]: Failure bundles stay screenshot-first and collect compact JSON/CSV/response artifacts instead of always-on heavy capture.
 
 ## Metrics
 
@@ -71,6 +73,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 
 - **13-01:** 8 min, 2 tasks, 4 primary files modified, verification via `node scripts/test/run-lane.mjs fast --list`, `node scripts/test/run-lane.mjs smoke --list`, and `npm test`
 - **13-02:** 4 min, 2 tasks, 7 primary files modified, verification via `npm run typecheck` and `npm run test:fast` with existing out-of-scope blockers in untouched CLI/test files
+- **13-04:** 14 min, 2 tasks, 7 primary files modified, verification via `node scripts/test/run-lane.mjs smoke --list` and `npm run test:smoke`
 
 ## Phase 09 Execution Summary
 
@@ -99,13 +102,14 @@ Phase 13 execution is underway:
 
 - `13-01` completed: fast/smoke lane runner, manifest, and README workflow
 - `13-02` completed: AST-backed source contract helper and stronger retained architectural guards
+- `13-04` completed: runtime smoke harness, structured smoke failure bundles, and explicit `*.smoke.test.ts` ownership for real I/O seams
 
 Recommended next action: execute `13-03-PLAN.md` to expand deterministic behavioral coverage for `runManager`, `OrchestratorService`, and the CLI.
 
 ## Session Continuity
 
-- **Last session:** 2026-04-04T22:05:56.712Z
-- **Stopped at:** Completed 13-02-PLAN.md
+- **Last session:** 2026-04-04T22:07:01.183Z
+- **Stopped at:** Completed 13-04-PLAN.md
 - **Resume file:** .planning/phases/13-excelencia-y-estabilizacion-de-testing/13-03-PLAN.md
 
 ## Phase 09 Execution Details
@@ -130,4 +134,4 @@ Recommended next action: execute `13-03-PLAN.md` to expand deterministic behavio
 
 ---
 
-Updated: 2026-04-04 after completing 13-02 execution
+Updated: 2026-04-05 after completing 13-04 execution
