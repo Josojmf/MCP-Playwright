@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import chalk from "chalk";
 import { GherkinParserService } from "../server/parser";
 import { OrchestratorService } from "../server/orchestrator/OrchestratorService";
@@ -9,6 +10,34 @@ import { TokenBudget } from "../shared/harness/TokenBudget";
 import { getLatestRunId, getRun } from "../server/storage/sqlite";
 import { createProvider, ProviderConfigError } from "../shared/llm/factory";
 import type { ProviderConfig, ProviderName } from "../shared/llm/types";
+import type { ScenarioPlan } from "../server/parser";
+
+type CliRunRecord = NonNullable<ReturnType<typeof getRun>>;
+type CliOrchestrator = Pick<OrchestratorService, "runScenario">;
+
+interface CliDependencies {
+  readFeatureText: (resolvedPath: string) => string;
+  createProvider: typeof createProvider;
+  parseFeature: (featureText: string) => ScenarioPlan[];
+  createOrchestrator: (provider: Awaited<ReturnType<typeof createProvider>>) => CliOrchestrator;
+  now: () => number;
+  log: (message: string) => void;
+  error: (message: string) => void;
+  getLatestRunId: () => string | undefined;
+  getRun: (runId: string) => CliRunRecord | undefined;
+}
+
+const defaultCliDeps: CliDependencies = {
+  readFeatureText: (resolvedPath) => readFileSync(resolve(resolvedPath), "utf-8"),
+  createProvider,
+  parseFeature: (featureText) => new GherkinParserService().parseFeature(featureText),
+  createOrchestrator: (provider) => new OrchestratorService(provider),
+  now: () => Date.now(),
+  log: (message) => console.log(message),
+  error: (message) => console.error(message),
+  getLatestRunId,
+  getRun,
+};
 
 async function main() {
   const [command, ...rawArgs] = process.argv.slice(2);
@@ -35,7 +64,10 @@ async function main() {
   process.exit(1);
 }
 
-async function runHeadless(args: Record<string, string>): Promise<number> {
+export async function runHeadless(
+  args: Record<string, string>,
+  deps: CliDependencies = defaultCliDeps
+): Promise<number> {
   const baseUrl = args.url;
   const featurePath = args.feature;
   const tokenCap = Number.parseInt(args.tokenCap ?? "12000", 10);
@@ -45,13 +77,13 @@ async function runHeadless(args: Record<string, string>): Promise<number> {
     .filter(Boolean);
 
   if (!baseUrl || !featurePath) {
-    console.error("Uso inválido: faltan --url o --feature");
+    deps.error("Uso inválido: faltan --url o --feature");
     return 1;
   }
 
   const providerFlag = args.provider;
   if (!providerFlag) {
-    console.error(
+    deps.error(
       'Error: --provider is required.\n' +
       'Supported providers and required env vars:\n' +
       '  openrouter  -> OPENROUTER_API_KEY\n' +
@@ -74,20 +106,20 @@ async function runHeadless(args: Record<string, string>): Promise<number> {
 
   let provider;
   try {
-    provider = await createProvider(providerConfig);
+    provider = await deps.createProvider(providerConfig);
   } catch (err) {
     if (err instanceof ProviderConfigError) {
-      console.error(`Provider configuration error: ${err.message}`);
+      deps.error(`Provider configuration error: ${err.message}`);
       return 1;
     }
     throw err;
   }
 
-  const featureText = readFileSync(resolve(featurePath), "utf-8");
-  const parser = new GherkinParserService();
-  const scenarios = parser.parseFeature(featureText);
+  const resolvedFeaturePath = resolve(featurePath);
+  const featureText = deps.readFeatureText(resolvedFeaturePath);
+  const scenarios = deps.parseFeature(featureText);
 
-  const orchestrator = new OrchestratorService(provider);
+  const orchestrator = deps.createOrchestrator(provider);
   const budget = new TokenBudget({
     hardCapTokens: Number.isFinite(tokenCap) ? tokenCap : 12000,
     warnThresholdRatio: 0.8,
@@ -122,7 +154,7 @@ async function runHeadless(args: Record<string, string>): Promise<number> {
       };
 
       const runContext: RunContext = {
-        runId: `cli-${Date.now()}-${mcpId}`,
+        runId: `cli-${deps.now()}-${mcpId}`,
         baseUrl,
         scenario,
         mcpConfig,
@@ -166,7 +198,7 @@ async function runHeadless(args: Record<string, string>): Promise<number> {
     results,
   };
 
-  console.log(JSON.stringify(output, null, 2));
+  deps.log(JSON.stringify(output, null, 2));
 
   const hasFailure = results.some((mcp) =>
     mcp.scenarios.some((scenario) =>
@@ -177,26 +209,29 @@ async function runHeadless(args: Record<string, string>): Promise<number> {
   return hasFailure ? 1 : 0;
 }
 
-function runDebug(args: Record<string, string>): number {
+export function runDebug(
+  args: Record<string, string>,
+  deps: CliDependencies = defaultCliDeps
+): number {
   const mcpFilter = args.mcp?.trim();
-  const runId = args.runId?.trim() || getLatestRunId();
+  const runId = args.runId?.trim() || deps.getLatestRunId();
 
   if (!runId) {
-    console.error("No hay runs persistidos para depurar.");
+    deps.error("No hay runs persistidos para depurar.");
     return 1;
   }
 
-  const run = getRun(runId);
+  const run = deps.getRun(runId);
   if (!run) {
-    console.error(`Run no encontrado: ${runId}`);
+    deps.error(`Run no encontrado: ${runId}`);
     return 1;
   }
 
-  console.log(`Run: ${run.id}`);
-  console.log(`Nombre: ${run.name}`);
-  console.log(`Estado: ${run.status}`);
-  console.log(`Pasos: ${run.steps.length}`);
-  console.log("---");
+  deps.log(`Run: ${run.id}`);
+  deps.log(`Nombre: ${run.name}`);
+  deps.log(`Estado: ${run.status}`);
+  deps.log(`Pasos: ${run.steps.length}`);
+  deps.log("---");
 
   for (const step of run.steps) {
     if (mcpFilter && !step.mcpId.includes(mcpFilter)) {
@@ -225,9 +260,9 @@ function runDebug(args: Record<string, string>): number {
         ? chalk.yellow(stepHeader)
         : stepHeader;
 
-    console.log(coloredHeader);
-    console.log(`  ${step.text}`);
-    console.log(`  ${step.message}`);
+    deps.log(coloredHeader);
+    deps.log(`  ${step.text}`);
+    deps.log(`  ${step.message}`);
 
     for (const toolCall of step.toolCalls) {
       if (!toolCall || typeof toolCall !== "object") {
@@ -245,7 +280,7 @@ function runDebug(args: Record<string, string>): number {
         : truncateText(String(error), 150);
       const latencyText = typeof latencyMs === "number" ? ` lat=${latencyMs}ms` : "";
 
-      console.log(`    → ${toolName}  args: ${argsText}  ${resultLabel}: ${resultValue}${latencyText}`);
+      deps.log(`    → ${toolName}  args: ${argsText}  ${resultLabel}: ${resultValue}${latencyText}`);
     }
   }
 
@@ -270,7 +305,7 @@ function truncateText(value: string, maxLength: number): string {
   return `${value.slice(0, maxLength)}...`;
 }
 
-function parseArgs(rawArgs: string[]): Record<string, string> {
+export function parseArgs(rawArgs: string[]): Record<string, string> {
   const parsed: Record<string, string> = {};
 
   for (let i = 0; i < rawArgs.length; i += 1) {
@@ -300,4 +335,6 @@ function printHelp() {
   console.log("mcp-bench debug [--runId <runId>] [--mcp <filter>]");
 }
 
-void main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void main();
+}

@@ -1,14 +1,14 @@
 export const smokeInventory = Object.freeze([
   {
-    file: "src/server/api/history.test.ts",
+    file: "src/server/api/history.smoke.test.ts",
     reason: "Fastify injection coverage against persisted run metadata and trust-state output.",
   },
   {
-    file: "src/server/storage/sqlite.test.ts",
+    file: "src/server/storage/sqlite.smoke.test.ts",
     reason: "Real SQLite persistence coverage for runs, steps, and screenshot metadata.",
   },
   {
-    file: "src/server/storage/screenshots.test.ts",
+    file: "src/server/storage/screenshots.smoke.test.ts",
     reason: "Filesystem-backed screenshot storage smoke coverage.",
   },
 ]);
