@@ -1,10 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { PhaseOneRunManager } from "./runManager";
+import {
+  assertCallArgumentObjectProperties,
+  assertNormalizedFragments,
+  assertObjectProperties,
+  getVariableInitializerObject,
+  loadSourceContract,
+} from "../test/support/sourceContracts";
 
-const runManagerSource = readFileSync(resolve(process.cwd(), "src/server/runManager.ts"), "utf8");
+const runManagerSource = loadSourceContract(new URL("./runManager.ts", import.meta.url));
 const loggerStub = {
   info: () => undefined,
   warn: () => undefined,
@@ -15,20 +20,41 @@ const loggerStub = {
 } as any;
 
 test("phase8 contract (INFRA-04): loop detector usa fingerprint de tool call real", () => {
-  assert.match(runManagerSource, /name:\s*toolCall\.toolName/);
-  assert.match(runManagerSource, /argsString:\s*JSON\.stringify\(toolCall\.arguments\)/);
-  assert.match(runManagerSource, /status:\s*'aborted'\s+as\s+const/);
+  assertCallArgumentObjectProperties(runManagerSource, {
+    callee: "loopDetector.recordAndCheck",
+    withinFunction: "executeMcpRun",
+    argumentIndex: 0,
+    expectations: {
+      name: "toolCall.toolName",
+      argsString: "JSON.stringify(toolCall.arguments)",
+    },
+  });
+
+  const abortedResult = getVariableInitializerObject(runManagerSource, "abortedResult", {
+    withinFunction: "executeMcpRun",
+  });
+  assertObjectProperties(runManagerSource, abortedResult, {
+    status: "'aborted'",
+    message: /`\[LOOP\] \$\{loopErr\.message\}`/,
+  });
 });
 
 test("phase8 contract (EXEC-03): executeMcpRun usa McpProcessManager directo en InstrumentedMcpClient", () => {
-  assert.match(runManagerSource, /new\s+InstrumentedMcpClient\(processManager\)/);
-  assert.doesNotMatch(runManagerSource, /stubMcpClient/);
-  assert.doesNotMatch(runManagerSource, /Stub:\s*\$\{name\}/);
+  assertNormalizedFragments(
+    runManagerSource,
+    ["const instrumentedClient = new InstrumentedMcpClient(processManager)"],
+    "real MCP client wiring"
+  );
+  assert.doesNotMatch(runManagerSource.text, /stubMcpClient/);
+  assert.doesNotMatch(runManagerSource.text, /Stub:\s*\$\{name\}/);
 });
 
 test("phase8 contract (ORCH-07): estimateRun usa resolvePricing y falla en provider:model desconocido", () => {
-  assert.match(runManagerSource, /const\s+pricing\s*=\s*resolvePricing\(/);
-  assert.match(runManagerSource, /Unknown pricing for provider/);
+  assertNormalizedFragments(
+    runManagerSource,
+    ["const pricing = resolvePricing(normalizedInput.provider, normalizedInput.orchestratorModel)"],
+    "estimateRun pricing lookup"
+  );
 
   const manager = new PhaseOneRunManager(loggerStub);
   assert.throws(
@@ -39,9 +65,9 @@ test("phase8 contract (ORCH-07): estimateRun usa resolvePricing y falla en provi
         selectedMcpIds: ["@playwright/mcp"],
         tokenCap: 12000,
         provider: "definitely-unknown-provider",
-        model: "non-existent-model",
+        orchestratorModel: "non-existent-model",
       }),
-    (error) => error instanceof Error && /Unknown pricing for provider/i.test(error.message)
+    (error) => error instanceof Error && /Provider no soportado/i.test(error.message)
   );
 });
 
