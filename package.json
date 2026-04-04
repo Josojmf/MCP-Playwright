@@ -6,7 +6,10 @@
     "mcp-bench": "bin/mcp-bench.js"
   },
   "scripts": {
-    "test": "node ./node_modules/tsx/dist/cli.mjs --test \"src/**/*.test.ts\"",
+    "test": "node ./scripts/test/run-lane.mjs fast",
+    "test:fast": "node ./scripts/test/run-lane.mjs fast",
+    "test:smoke": "node ./scripts/test/run-lane.mjs smoke",
+    "test:ci": "node ./scripts/test/run-lane.mjs ci",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
     "dev": "concurrently \"vite\" \"tsx src/server/index.ts\"",
     "build": "vite build",
