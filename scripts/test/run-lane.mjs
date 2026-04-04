@@ -1,10 +1,16 @@
 import { readdirSync, statSync } from "node:fs";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { testManifest } from "./test-manifest.mjs";
 
 const projectRoot = process.cwd();
 const tsxCli = path.join(projectRoot, "node_modules", "tsx", "dist", "cli.mjs");
+const failureArtifactsRoot = path.join(projectRoot, ".artifacts", "test-failures");
+
+function sanitizeFileComponent(value) {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "artifact";
+}
 
 function toPosixPath(filePath) {
   return filePath.split(path.sep).join("/");
@@ -80,6 +86,10 @@ function resolveLaneFiles(laneName) {
   throw new Error(`Unknown lane: ${laneName}`);
 }
 
+function getFailureBundleConfig(laneName) {
+  return testManifest[laneName]?.diagnostics?.failureBundle ?? false;
+}
+
 function printLaneList(laneName, files) {
   console.log(`Lane: ${laneName}`);
   for (const file of files) {
@@ -87,22 +97,192 @@ function printLaneList(laneName, files) {
   }
 }
 
-function runTsxTests(files) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [tsxCli, "--test", ...files], {
-      cwd: projectRoot,
-      stdio: "inherit",
-    });
+async function createFailureBundleSession(laneName, files) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const sessionDir = path.join(failureArtifactsRoot, ".tmp", `${laneName}-${timestamp}`);
+  const registryPath = path.join(sessionDir, "registry.jsonl");
+  const contextDir = path.join(sessionDir, "context");
 
-    child.on("error", reject);
-    child.on("exit", (code, signal) => {
-      if (signal) {
-        reject(new Error(`Test lane exited from signal ${signal}`));
-        return;
+  await mkdir(contextDir, { recursive: true });
+
+  return {
+    laneName,
+    files,
+    startedAt: new Date().toISOString(),
+    sessionDir,
+    registryPath,
+    contextDir,
+  };
+}
+
+async function readFailureRegistry(registryPath) {
+  try {
+    const content = await readFile(registryPath, "utf8");
+    return content
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  } catch {
+    return [];
+  }
+}
+
+async function copyArtifactIntoBundle(entry, bundleArtifactsDir, seenTargets) {
+  const labelPrefix = sanitizeFileComponent(entry.label);
+  const targetName = `${String(seenTargets.size).padStart(2, "0")}-${labelPrefix}`;
+  const destinationPath = path.join(bundleArtifactsDir, targetName);
+  seenTargets.add(targetName);
+  await cp(entry.path, destinationPath, {
+    recursive: entry.kind === "directory",
+    force: true,
+  });
+  return path.relative(projectRoot, destinationPath).split(path.sep).join("/");
+}
+
+async function finalizeFailureBundle(session, result) {
+  const failureConfig = getFailureBundleConfig(session.laneName);
+  if (!failureConfig || !failureConfig.enabled) {
+    return undefined;
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const bundleDir = path.join(projectRoot, failureConfig.outputDir, timestamp);
+  const bundleArtifactsDir = path.join(bundleDir, "artifacts");
+  const registryEntries = await readFailureRegistry(session.registryPath);
+  const combinedOutput = `${result.stdout}\n${result.stderr}`;
+  const suspectedFailingFiles = session.files.filter((file) => combinedOutput.includes(file));
+  const copiedArtifacts = [];
+  const seenTargets = new Set();
+
+  await mkdir(bundleArtifactsDir, { recursive: true });
+  await writeFile(path.join(bundleDir, "stdout.log"), result.stdout, "utf8");
+  await writeFile(path.join(bundleDir, "stderr.log"), result.stderr, "utf8");
+
+  if (statSync(session.contextDir, { throwIfNoEntry: false })?.isDirectory()) {
+    await cp(session.contextDir, path.join(bundleDir, "context"), {
+      recursive: true,
+      force: true,
+    });
+  }
+
+  for (const entry of registryEntries) {
+    const sourceStats = statSync(entry.path, { throwIfNoEntry: false });
+    if (!sourceStats) {
+      copiedArtifacts.push({
+        ...entry,
+        copiedTo: null,
+        missing: true,
+      });
+      continue;
+    }
+
+    const copiedTo = await copyArtifactIntoBundle(entry, bundleArtifactsDir, seenTargets);
+    copiedArtifacts.push({
+      ...entry,
+      copiedTo,
+      missing: false,
+    });
+  }
+
+  const manifest = {
+    lane: session.laneName,
+    startedAt: session.startedAt,
+    finishedAt: result.finishedAt,
+    durationMs: result.durationMs,
+    exitCode: result.exitCode,
+    command: `node ${path.relative(projectRoot, tsxCli)} --test ${session.files.join(" ")}`,
+    executedFiles: session.files,
+    suspectedFailingFiles,
+    env: {
+      CI: process.env.CI ?? null,
+      NODE_ENV: process.env.NODE_ENV ?? null,
+      DATA_DIR: process.env.DATA_DIR ?? null,
+    },
+    diagnostics: {
+      retention: failureConfig.retention ?? null,
+      stdoutLog: "stdout.log",
+      stderrLog: "stderr.log",
+      copiedArtifacts,
+    },
+  };
+
+  await writeFile(path.join(bundleDir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
+  await rm(session.sessionDir, { recursive: true, force: true });
+  return bundleDir;
+}
+
+async function cleanupFailureBundleSession(session) {
+  if (!session) {
+    return;
+  }
+
+  await rm(session.sessionDir, { recursive: true, force: true });
+}
+
+function runTsxTests(files, laneName) {
+  return new Promise((resolve, reject) => {
+    (async () => {
+      const shouldCollectFailureBundle = Boolean(getFailureBundleConfig(laneName)?.enabled);
+      const startEpochMs = Date.now();
+      const session = shouldCollectFailureBundle ? await createFailureBundleSession(laneName, files) : null;
+      const stdoutChunks = [];
+      const stderrChunks = [];
+      const env = { ...process.env };
+
+      if (session) {
+        env.TEST_FAILURE_REGISTRY_PATH = session.registryPath;
+        env.TEST_FAILURE_CONTEXT_DIR = session.contextDir;
+        env.TEST_FAILURE_LANE = laneName;
       }
 
-      resolve(code ?? 1);
-    });
+      const child = spawn(process.execPath, [tsxCli, "--test", ...files], {
+        cwd: projectRoot,
+        env,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      child.stdout.on("data", (chunk) => {
+        stdoutChunks.push(chunk.toString());
+        process.stdout.write(chunk);
+      });
+
+      child.stderr.on("data", (chunk) => {
+        stderrChunks.push(chunk.toString());
+        process.stderr.write(chunk);
+      });
+
+      child.on("error", reject);
+      child.on("exit", async (code, signal) => {
+        if (signal) {
+          reject(new Error(`Test lane exited from signal ${signal}`));
+          return;
+        }
+
+        const exitCode = code ?? 1;
+        const result = {
+          exitCode,
+          stdout: stdoutChunks.join(""),
+          stderr: stderrChunks.join(""),
+          durationMs: Date.now() - startEpochMs,
+          finishedAt: new Date().toISOString(),
+        };
+
+        try {
+          const failureBundlePath =
+            exitCode !== 0 && session ? await finalizeFailureBundle(session, result) : undefined;
+          if (exitCode === 0) {
+            await cleanupFailureBundleSession(session);
+          }
+
+          resolve({
+            exitCode,
+            failureBundlePath,
+          });
+        } catch (error) {
+          reject(error);
+        }
+      });
+    })().catch(reject);
   });
 }
 
@@ -119,7 +299,11 @@ async function runLane(laneName, { listOnly }) {
   }
 
   console.log(`Running ${laneName} lane with ${files.length} files.`);
-  return runTsxTests(files);
+  const result = await runTsxTests(files, laneName);
+  if (result.failureBundlePath) {
+    console.error(`Failure bundle: ${path.relative(projectRoot, result.failureBundlePath)}`);
+  }
+  return result.exitCode;
 }
 
 async function main() {

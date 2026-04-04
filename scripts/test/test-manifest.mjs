@@ -24,6 +24,9 @@ export const testManifest = Object.freeze({
       includeSuffixes: [".test.ts", ".contract.test.ts", ".evidence.test.ts"],
       excludeFiles: smokeTestFiles,
     },
+    diagnostics: {
+      failureBundle: false,
+    },
   },
   smoke: {
     description: "Smaller real-seam lane for slower persistence and filesystem coverage.",
@@ -31,6 +34,13 @@ export const testManifest = Object.freeze({
       policy:
         "Only tests that exercise real persistence, filesystem, process lifecycle, or similarly expensive seams belong here.",
       files: smokeInventory,
+    },
+    diagnostics: {
+      failureBundle: {
+        enabled: true,
+        outputDir: ".artifacts/test-failures/smoke",
+        retention: "screenshot-first",
+      },
     },
   },
 });
