@@ -5,110 +5,18 @@ import { OrchestratorService } from "./OrchestratorService";
 import { RunContext, StepResult, MCPConfig } from "./types";
 import { ScenarioPlan, ParsedStep } from "../parser";
 import { TokenBudget } from "../../shared/harness/TokenBudget";
-import { ProviderConfig, LLMProvider, LLMRequest, LLMResponse, LLMChunk } from "../../shared/llm/types";
-
-// Mock LLM Provider for testing
-class MockLLMProvider implements LLMProvider {
-  async complete(request: LLMRequest): Promise<LLMResponse> {
-    return {
-      id: randomUUID(),
-      model: request.model,
-      choices: [
-        {
-          index: 0,
-          message: {
-            role: "assistant",
-            content: `Executed: ${request.messages[request.messages.length - 1]?.content || "step"}`,
-          },
-          finishReason: "stop",
-        },
-      ],
-      usage: {
-        promptTokens: 150,
-        completionTokens: 50,
-        totalTokens: 200,
-      },
-    };
-  }
-
-  async *stream(_request: LLMRequest): AsyncIterable<LLMChunk> {
-    yield {
-      index: 0,
-      delta: "Executed",
-      finishReason: null,
-    };
-  }
-
-  async estimateCost(_inputTokens: number, _outputTokens: number, _model: string): Promise<number> {
-    return 0.001;
-  }
-}
-
-class AuthFailLLMProvider implements LLMProvider {
-  async complete(_request: LLMRequest): Promise<LLMResponse> {
-    throw new Error("OpenRouterAdapter request failed (401)");
-  }
-
-  async *stream(_request: LLMRequest): AsyncIterable<LLMChunk> {
-    yield {
-      index: 0,
-      delta: "",
-      finishReason: "stop",
-    };
-  }
-
-  async estimateCost(_inputTokens: number, _outputTokens: number, _model: string): Promise<number> {
-    return 0;
-  }
-}
-
-class JsonToolLoopProvider implements LLMProvider {
-  private calls = 0;
-
-  async complete(request: LLMRequest): Promise<LLMResponse> {
-    this.calls += 1;
-    const content = this.calls === 1
-      ? JSON.stringify({
-          kind: "tool",
-          toolName: "browser_navigate",
-          arguments: { url: "https://example.com" },
-          reason: "open the target page",
-        })
-      : JSON.stringify({
-          kind: "done",
-          status: "passed",
-          message: "La navegación se completó correctamente.",
-        });
-
-    return {
-      id: randomUUID(),
-      model: request.model,
-      choices: [
-        {
-          index: 0,
-          message: {
-            role: "assistant",
-            content,
-          },
-          finishReason: "stop",
-        },
-      ],
-      usage: {
-        promptTokens: 100,
-        completionTokens: 25,
-        totalTokens: 125,
-      },
-    };
-  }
-
-  async *stream(_request: LLMRequest): AsyncIterable<LLMChunk> {
-    yield { index: 0, delta: "", finishReason: "stop" };
-  }
-
-  async estimateCost(_inputTokens: number, _outputTokens: number, _model: string): Promise<number> {
-    return 0;
-  }
-}
+import { ProviderConfig } from "../../shared/llm/types";
+import {
+  AuthFailureProvider,
+  FakeToolClient,
+  ScriptedLLMProvider,
+  buildMcpConfig,
+  buildParsedStep,
+  buildRunContext,
+  buildScenario,
+  collectResults,
+  createToolDefinition,
+} from "../../test/support/runtimeFixtures";
 
 test("StepResult represents all states with tokens and latency", async (t) => {
   await t.test("should handle running state", () => {
@@ -211,6 +119,10 @@ test("Events are serializable for SSE", async (t) => {
           toolId: "tool-1",
           toolName: "click",
           arguments: { selector: "#button" },
+          status: "success",
+          correlationId: "corr-1",
+          latencyMs: 12,
+          captureTimestamp: new Date().toISOString(),
           result: "clicked successfully",
         },
       ],
@@ -245,12 +157,20 @@ test("Events are serializable for SSE", async (t) => {
           toolId: "tool-1",
           toolName: "navigate",
           arguments: { url: "https://example.com" },
+          status: "success",
+          correlationId: "corr-1",
+          latencyMs: 10,
+          captureTimestamp: new Date().toISOString(),
           result: "navigated",
         },
         {
           toolId: "tool-2",
           toolName: "click",
           arguments: { selector: ".submit-btn" },
+          status: "success",
+          correlationId: "corr-2",
+          latencyMs: 9,
+          captureTimestamp: new Date().toISOString(),
           result: "clicked",
         },
       ],
@@ -267,7 +187,10 @@ test("Events are serializable for SSE", async (t) => {
 });
 
 test("runScenario maintains conversation history between steps", async (t) => {
-  const mockProvider = new MockLLMProvider();
+  const mockProvider = new ScriptedLLMProvider([
+    "Executed: Given I have a test step",
+    "Executed: When I execute the step",
+  ]);
   const orchestrator = new OrchestratorService(mockProvider);
   const mockTokenBudget = new TokenBudget(
     {
@@ -369,7 +292,7 @@ const oneStepScenario: ScenarioPlan = {
 };
 
 test("runScenario aborts when token budget is exceeded before LLM call", async () => {
-  const mockProvider = new MockLLMProvider();
+  const mockProvider = new ScriptedLLMProvider(["Executed"]);
   const orchestrator = new OrchestratorService(mockProvider);
   const tightBudget = new TokenBudget(
     { hardCapTokens: 100, warnThresholdRatio: 0.8 },
@@ -401,7 +324,7 @@ test("runScenario aborts when token budget is exceeded before LLM call", async (
 });
 
 test("AsyncGenerator behavior", async (t) => {
-  const mockProvider = new MockLLMProvider();
+  const mockProvider = new ScriptedLLMProvider(["Executed"]);
   const orchestrator = new OrchestratorService(mockProvider);
   const mockTokenBudget = new TokenBudget(
     {
@@ -475,7 +398,7 @@ test("AsyncGenerator behavior", async (t) => {
 });
 
 test("Then step with assertion overrides status to failed when assertion fails", async () => {
-  const mockProvider = new MockLLMProvider();
+  const mockProvider = new ScriptedLLMProvider(["Executed"]);
   const orchestrator = new OrchestratorService(mockProvider);
   const budget = new TokenBudget({ hardCapTokens: 10000, warnThresholdRatio: 0.8 }, () => {});
 
@@ -521,7 +444,7 @@ test("Then step with assertion overrides status to failed when assertion fails",
 });
 
 test("runScenario corta temprano ante error fatal de autenticación", async () => {
-  const orchestrator = new OrchestratorService(new AuthFailLLMProvider());
+  const orchestrator = new OrchestratorService(new AuthFailureProvider());
   const mockTokenBudget = new TokenBudget(
     {
       hardCapTokens: 10000,
@@ -579,7 +502,19 @@ test("runScenario corta temprano ante error fatal de autenticación", async () =
 });
 
 test("runScenario uses live MCP tool loop when tool client and tools are provided", async () => {
-  const provider = new JsonToolLoopProvider();
+  const provider = new ScriptedLLMProvider([
+    JSON.stringify({
+      kind: "tool",
+      toolName: "browser_navigate",
+      arguments: { url: "https://example.com" },
+      reason: "open the target page",
+    }),
+    JSON.stringify({
+      kind: "done",
+      status: "passed",
+      message: "La navegación se completó correctamente.",
+    }),
+  ]);
   const orchestrator = new OrchestratorService(provider);
   const budget = new TokenBudget({ hardCapTokens: 10000, warnThresholdRatio: 0.8 }, () => {});
   const toolInvocations: Array<{ name: string; args: Record<string, unknown> }> = [];
@@ -630,4 +565,95 @@ test("runScenario uses live MCP tool loop when tool client and tools are provide
   assert.equal(results[0].toolCalls.length, 1);
   assert.equal(results[0].toolCalls[0].toolName, "browser_navigate");
   assert.deepEqual(toolInvocations, [{ name: "browser_navigate", args: { url: "https://example.com" } }]);
+});
+
+test("runScenario no llama al provider cuando el abort signal ya viene cancelado", async () => {
+  const provider = new ScriptedLLMProvider(["should not be used"]);
+  const orchestrator = new OrchestratorService(provider);
+  const abortController = new AbortController();
+  abortController.abort();
+
+  const scenario = buildScenario({
+    steps: [buildParsedStep({ text: "I should never execute" })],
+  });
+  const ctx = buildRunContext({
+    scenario,
+    abortSignal: abortController.signal,
+  });
+
+  const results = await collectResults(orchestrator.runScenario(scenario, ctx));
+
+  assert.equal(results.length, 1);
+  assert.equal(results[0].status, "aborted");
+  assert.equal(provider.requests.length, 0);
+});
+
+test("runScenario acumula historial real entre pasos legacy y conserva los mensajes previos", async () => {
+  const provider = new ScriptedLLMProvider([
+    "Executed: Given I open the page",
+    "Executed: When I click login",
+  ]);
+  const orchestrator = new OrchestratorService(provider);
+  const scenario = buildScenario({
+    name: "Conversation Scenario",
+    steps: [
+      buildParsedStep({ keyword: "Given", canonicalType: "given", text: "I open the page" }),
+      buildParsedStep({ keyword: "When", canonicalType: "when", text: "I click login" }),
+    ],
+  });
+  const ctx = buildRunContext({
+    scenario,
+    conversationHistory: [{ role: "assistant", content: "Previous conversation seed" }],
+  });
+
+  const results = await collectResults(orchestrator.runScenario(scenario, ctx));
+
+  assert.equal(results.length, 2);
+  assert.equal(provider.requests.length, 2);
+  assert.equal(provider.requests[0].messages.length, 3);
+  assert.equal(provider.requests[1].messages.length, 5);
+  assert.equal(provider.requests[1].messages[3].role, "assistant");
+  assert.match(String(provider.requests[1].messages[3].content), /Executed: Given I open the page/);
+  assert.equal(ctx.conversationHistory.length, 5);
+});
+
+test("runScenario live MCP propaga tool errors y permite cerrar el paso como failed sin estado compartido", async () => {
+  const provider = new ScriptedLLMProvider([
+    JSON.stringify({
+      kind: "tool",
+      toolName: "browser_click",
+      arguments: { element: "#missing" },
+    }),
+    JSON.stringify({
+      kind: "done",
+      status: "failed",
+      message: "No pude encontrar el selector.",
+    }),
+  ]);
+  const orchestrator = new OrchestratorService(provider);
+  const toolClient = new FakeToolClient(() => ({
+    type: "error",
+    error: "Selector not found",
+  }));
+  const scenario = buildScenario({
+    id: "scenario-live-failure",
+    name: "Live failure scenario",
+    steps: [buildParsedStep({ keyword: "When", canonicalType: "when", text: "I click the missing selector" })],
+  });
+  const ctx = buildRunContext({
+    baseUrl: "https://example.com",
+    scenario,
+    mcpConfig: buildMcpConfig({ id: "@playwright/mcp", model: "gpt-4" }),
+    toolClient,
+    availableTools: [createToolDefinition("browser_click", "Click an element")],
+  });
+
+  const [result] = await collectResults(orchestrator.runScenario(scenario, ctx));
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.toolCalls.length, 1);
+  assert.equal(result.toolCalls[0].status, "error");
+  assert.equal(result.toolCalls[0].toolName, "browser_click");
+  assert.equal(result.toolCalls[0].error, "Selector not found");
+  assert.deepEqual(toolClient.invocations, [{ name: "browser_click", args: { element: "#missing" } }]);
 });
