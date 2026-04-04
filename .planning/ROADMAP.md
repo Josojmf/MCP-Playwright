@@ -397,7 +397,7 @@ Plans:
 | 10. CLI Debug Trace & CSV Scorecard | 0/2 | Pending | — |
 | 11. Execution transparency and live Playwright step viewer | 2/2 | Completed | 2026-04-04 |
 | 12. Mejorar fiabilidad, seguridad y transparencia del ejecutor de tests para QA | 4/4 | Completed | 2026-04-04 |
-| 13. Excelencia y Estabilizacion de Testing | 1/4 | In Progress | 2026-04-04 |
+| 13. Excelencia y Estabilizacion de Testing | 2/4 | In Progress|  |
 
 ---
 
@@ -531,11 +531,11 @@ Plans:
 - Reduccion del tiempo de ejecucion con paralelizacion segura, mocking eficiente y setups/teardowns optimizados
 - Reporting enriquecido con logs, trazas, capturas y reportes legibles para debugging rapido en CI/CD
 
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 - [x] 13-01-PLAN.md — Create the fast/smoke lane runner, manifest, and README workflow so `npm test` becomes the deterministic default lane
-- [ ] 13-02-PLAN.md — Prune weak regex-only contract tests and upgrade the retained source-shape guards around architectural invariants
+- [x] 13-02-PLAN.md — Prune weak regex-only contract tests and upgrade the retained source-shape guards around architectural invariants
 - [ ] 13-03-PLAN.md — Expand fast behavioral coverage for runManager, OrchestratorService, and CLI with deterministic fixtures
 - [ ] 13-04-PLAN.md — Move real persistence/filesystem tests into an explicit smoke lane and add structured failure bundles
 
@@ -548,4 +548,4 @@ Plans:
 ---
 
 *Roadmap created: 2026-03-30*
-*Last updated: 2026-04-04 after 13-01 execution and roadmap sync*
+*Last updated: 2026-04-04 after 13-02 execution and roadmap sync*
