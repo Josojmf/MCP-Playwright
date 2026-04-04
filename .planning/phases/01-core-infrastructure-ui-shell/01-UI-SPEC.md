@@ -56,6 +56,7 @@ created: 2026-03-30
 
 ## Layout Contract
 
+
 **Shell structure (from CONTEXT.md D-02 + REQUIREMENTS.md UI-09):**
 
 ```

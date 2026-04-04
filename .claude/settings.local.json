@@ -4,7 +4,17 @@
       "Bash(node:*)",
       "Bash(test -f \"$HOME/.gsd/defaults.json\")",
       "Skill(gsd:do)",
-      "Skill(gsd:ui-phase)"
+      "Skill(gsd:ui-phase)",
+      "Skill(gsd:complete-milestone)",
+      "Skill(gsd:plan-milestone-gaps)",
+      "Skill(gsd:plan-phase)",
+      "Skill(gsd:execute-phase)",
+      "Skill(gsd:discuss-phase)",
+      "Bash(ls .planning/codebase/*.md)",
+      "Bash(ls .planning/phases/09-real-vision-llm-validation/*-VALIDATION.md)",
+      "Bash(ls C:/INFORMATICA/MCP-Playwright/.planning/phases/09-real-vision-llm-validation/*VALIDATION* C:/INFORMATICA/MCP-Playwright/.planning/phases/09-real-vision-llm-validation/*VERIFICATION* C:/INFORMATICA/MCP-Playwright/.planning/phases/09-real-vision-llm-validation/*AUDIT*)",
+      "Bash(sed:*)",
+      "Bash(ls:*)"
     ]
   }
 }

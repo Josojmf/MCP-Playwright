@@ -4,8 +4,34 @@ import { RunContext, StepResult, ToolCallTrace } from "./types";
 import { withTimeout, TIMEOUT_TIERS } from "../../shared/harness/withTimeout";
 import { LLMMessage, LLMRequest, LLMProvider } from "../../shared/llm/types";
 import { createProvider } from "../../shared/llm/factory";
+import { assembleSystemPrompt } from "../../shared/llm/systemPrompt";
 import { BudgetExceededError } from "../../shared/harness/TokenBudget";
 import { runAssertion, AssertionResult } from "../validation/assertionsRunner";
+
+const MCP_AGENT_TEMPLATE = `You are a browser automation assistant. You must decide the next single MCP action for the current Gherkin step.
+
+Available tools:
+{TOOL_LIST}
+
+Rules:
+- Reply with JSON only.
+- Use one of these shapes:
+  {"kind":"tool","toolName":"exact_tool_name","arguments":{"key":"value"},"reason":"short reason"}
+  {"kind":"done","status":"passed","message":"short summary"}
+  {"kind":"done","status":"failed","message":"short failure summary"}
+- Use only tool names listed above.
+- For Playwright snapshot tools, take a fresh snapshot before clicking or filling by ref.
+- If a tool fails, inspect the error and choose the next best tool call or finish as failed.
+- Finish as soon as the step objective is satisfied.`;
+
+interface ToolDecision {
+  kind: "tool" | "done";
+  toolName?: string;
+  arguments?: Record<string, unknown>;
+  status?: "passed" | "failed";
+  message?: string;
+  reason?: string;
+}
 
 /**
  * OrchestratorService orchestrates sequential execution of a scenario
@@ -81,73 +107,55 @@ Scenario: ${scenario.name}`,
         const stepStartTime = Date.now();
 
         try {
-          // Build the user message for this step
-          const stepMessage: LLMMessage = {
-            role: "user",
-            content: `${step.keyword} ${step.text}`,
-          };
+          const hasLiveMcpTools = Boolean(ctx.toolClient && ctx.availableTools && ctx.availableTools.length > 0);
 
-          // Create request for LLM
-          const request: LLMRequest = {
-            model: ctx.mcpConfig.provider.model || "gpt-4",
-            messages: [...currentMessages, stepMessage],
-            maxTokens: 1000,
-          };
+          if (hasLiveMcpTools) {
+            const liveResult = await this.executeStepWithLiveMcp(
+              provider,
+              currentMessages,
+              scenario,
+              stepIndex,
+              ctx
+            );
 
-          // Guard: check token budget before making LLM request (INFRA-05)
-          ctx.tokenBudget.checkBudget();
+            currentMessages = liveResult.nextConversation;
+            ctx.conversationHistory = currentMessages.slice(1);
 
-          // Execute with timeout
-          const response = await withTimeout(
-            provider.complete(request),
-            TIMEOUT_TIERS.STEP,
-            `Step ${stepIndex + 1}`,
-            new AbortController()
-          );
-
-          const latencyMs = Date.now() - stepStartTime;
-
-          // Extract tool calls from response (simplified - in real impl, parse tool_use blocks)
-          const msgContent = response.choices[0]?.message?.content ?? "";
-          const contentStr = typeof msgContent === "string" ? msgContent : "";
-          const toolCalls: ToolCallTrace[] = this.extractToolCalls(contentStr);
-
-          // Update conversation history
-          currentMessages.push(stepMessage);
-          currentMessages.push(response.choices[0]?.message ?? { role: "assistant", content: "Step completed" });
-
-          // Update context conversation history for next steps
-          ctx.conversationHistory = currentMessages.slice(1); // Exclude system message
-
-          // Add tokens to budget
-          ctx.tokenBudget.addUsage(response.usage.totalTokens);
-
-          // VALID-02: Run independent assertion for Then steps
-          let assertionOverride: AssertionResult | null = null;
-          if (step.canonicalType === "then" && step.assertion) {
-            assertionOverride = await runAssertion(step.assertion, {});
+            yield this.createStepResult(
+              ctx.mcpConfig.id,
+              step,
+              scenario,
+              stepIndex,
+              liveResult.status,
+              liveResult.tokens,
+              Date.now() - stepStartTime,
+              liveResult.message,
+              liveResult.toolCalls
+            );
+            continue;
           }
 
-          const stepStatus = assertionOverride?.status === "failed" ? "failed" : "passed";
-          const stepResultMessage = assertionOverride?.status === "failed"
-            ? `Assertion independiente falló: ${assertionOverride.message}`
-            : `Paso completado exitosamente (${response.usage.totalTokens} tokens)`;
+          const legacyResult = await this.executeStepWithTextOnlyProvider(
+            provider,
+            currentMessages,
+            scenario,
+            stepIndex,
+            ctx
+          );
 
-          // Yield success result
+          currentMessages = legacyResult.nextConversation;
+          ctx.conversationHistory = currentMessages.slice(1);
+
           yield this.createStepResult(
             ctx.mcpConfig.id,
             step,
             scenario,
             stepIndex,
-            stepStatus,
-            {
-              input: response.usage.promptTokens,
-              output: response.usage.completionTokens,
-              total: response.usage.totalTokens,
-            },
-            latencyMs,
-            stepResultMessage,
-            toolCalls
+            legacyResult.status,
+            legacyResult.tokens,
+            Date.now() - stepStartTime,
+            legacyResult.message,
+            legacyResult.toolCalls
           );
         } catch (error) {
           const latencyMs = Date.now() - stepStartTime;
@@ -245,6 +253,205 @@ Scenario: ${scenario.name}`,
     };
   }
 
+  private async executeStepWithTextOnlyProvider(
+    provider: LLMProvider,
+    currentMessages: LLMMessage[],
+    scenario: ScenarioPlan,
+    stepIndex: number,
+    ctx: RunContext
+  ): Promise<{
+    status: "passed" | "failed";
+    tokens: { input: number; output: number; total: number };
+    message: string;
+    toolCalls: ToolCallTrace[];
+    nextConversation: LLMMessage[];
+  }> {
+    const step = scenario.steps[stepIndex];
+    const stepMessage: LLMMessage = {
+      role: "user",
+      content: `${step.keyword} ${step.text}`,
+    };
+
+    const request: LLMRequest = {
+      model: ctx.mcpConfig.provider.model || "gpt-4",
+      messages: [...currentMessages, stepMessage],
+      maxTokens: 1000,
+    };
+
+    ctx.tokenBudget.checkBudget();
+
+    const response = await withTimeout(
+      provider.complete(request),
+      TIMEOUT_TIERS.STEP,
+      `Step ${stepIndex + 1}`,
+      new AbortController()
+    );
+
+    const msgContent = response.choices[0]?.message?.content ?? "";
+    const contentStr = typeof msgContent === "string" ? msgContent : "";
+    const toolCalls: ToolCallTrace[] = this.extractToolCalls(contentStr);
+
+    const nextConversation = [
+      ...currentMessages,
+      stepMessage,
+      response.choices[0]?.message ?? { role: "assistant", content: "Step completed" },
+    ];
+
+    ctx.tokenBudget.addUsage(response.usage.totalTokens);
+
+    let assertionOverride: AssertionResult | null = null;
+    if (step.canonicalType === "then" && step.assertion) {
+      assertionOverride = await runAssertion(step.assertion, {});
+    }
+
+    const stepStatus = assertionOverride?.status === "failed" ? "failed" : "passed";
+    const stepResultMessage = assertionOverride?.status === "failed"
+      ? `Assertion independiente falló: ${assertionOverride.message}`
+      : `Paso completado exitosamente (${response.usage.totalTokens} tokens)`;
+
+    return {
+      status: stepStatus,
+      tokens: {
+        input: response.usage.promptTokens,
+        output: response.usage.completionTokens,
+        total: response.usage.totalTokens,
+      },
+      message: stepResultMessage,
+      toolCalls,
+      nextConversation,
+    };
+  }
+
+  private async executeStepWithLiveMcp(
+    provider: LLMProvider,
+    currentMessages: LLMMessage[],
+    scenario: ScenarioPlan,
+    stepIndex: number,
+    ctx: RunContext
+  ): Promise<{
+    status: "passed" | "failed";
+    tokens: { input: number; output: number; total: number };
+    message: string;
+    toolCalls: ToolCallTrace[];
+    nextConversation: LLMMessage[];
+  }> {
+    const step = scenario.steps[stepIndex];
+    const availableTools = ctx.availableTools ?? [];
+    const availableToolNames = new Set(availableTools.map((tool) => tool.name));
+    const stepPrompt = this.buildLiveStepPrompt(ctx.baseUrl, scenario.name, `${step.keyword} ${step.text}`);
+    const stepConversation: LLMMessage[] = [
+      ...currentMessages.filter((message) => message.role !== "system"),
+      { role: "user", content: stepPrompt },
+    ];
+    const toolCalls: ToolCallTrace[] = [];
+    const tokenUsage = { input: 0, output: 0, total: 0 };
+    const maxTurns = 8;
+
+    for (let turn = 0; turn < maxTurns; turn += 1) {
+      ctx.tokenBudget.checkBudget();
+
+      const response = await withTimeout(
+        provider.complete({
+          model: ctx.mcpConfig.provider.model || "gpt-4",
+          messages: [
+            {
+              role: "system",
+              content: assembleSystemPrompt(ctx.mcpConfig.id, availableTools, MCP_AGENT_TEMPLATE),
+            },
+            ...stepConversation,
+          ],
+          maxTokens: 900,
+          responseFormat: { type: "json_object" },
+        }),
+        TIMEOUT_TIERS.STEP,
+        `Step ${stepIndex + 1} live MCP turn ${turn + 1}`,
+        new AbortController()
+      );
+
+      tokenUsage.input += response.usage.promptTokens;
+      tokenUsage.output += response.usage.completionTokens;
+      tokenUsage.total += response.usage.totalTokens;
+      ctx.tokenBudget.addUsage(response.usage.totalTokens);
+
+      const assistantText = this.asString(response.choices[0]?.message?.content);
+      const decision = this.parseToolDecision(assistantText);
+      stepConversation.push({
+        role: "assistant",
+        content: assistantText || '{"kind":"done","status":"failed","message":"Empty model response"}',
+      });
+
+      if (!decision) {
+        stepConversation.push({
+          role: "user",
+          content: 'Respuesta inválida. Devuelve solo JSON con {"kind":"tool",...} o {"kind":"done",...}.',
+        });
+        continue;
+      }
+
+      if (decision.kind === "done") {
+        const message = decision.message?.trim() || `Paso ${decision.status === "failed" ? "fallido" : "completado"} con MCP real`;
+        const nextConversation = [
+          ...currentMessages,
+          { role: "user" as const, content: `${step.keyword} ${step.text}` },
+          { role: "assistant" as const, content: message },
+        ];
+
+        return {
+          status: decision.status === "failed" ? "failed" : "passed",
+          tokens: tokenUsage,
+          message,
+          toolCalls,
+          nextConversation,
+        };
+      }
+
+      const toolName = decision.toolName?.trim() ?? "";
+      const toolArgs = decision.arguments ?? {};
+
+      if (!toolName || !availableToolNames.has(toolName)) {
+        stepConversation.push({
+          role: "user",
+          content: `Herramienta no soportada: ${toolName || "(vacía)"}. Usa solo una de esta lista: ${[...availableToolNames].join(", ")}.`,
+        });
+        continue;
+      }
+
+      const toolResult = await ctx.toolClient!.callTool(toolName, toolArgs);
+      const toolSummary = this.summarizeToolResult(toolResult);
+
+      toolCalls.push({
+        toolId: `${toolName}-${toolCalls.length + 1}`,
+        toolName,
+        arguments: toolArgs,
+        result: toolResult.type === "success" ? toolSummary : undefined,
+        error: toolResult.type === "error" ? toolSummary : undefined,
+      });
+
+      stepConversation.push({
+        role: "user",
+        content: [
+          `Resultado de ${toolName}:`,
+          toolSummary,
+          "Decide la siguiente acción o finaliza el paso.",
+        ].join("\n"),
+      });
+    }
+
+    const nextConversation = [
+      ...currentMessages,
+      { role: "user" as const, content: `${step.keyword} ${step.text}` },
+      { role: "assistant" as const, content: "El agente agotó el límite de decisiones para este paso." },
+    ];
+
+    return {
+      status: "failed",
+      tokens: tokenUsage,
+      message: "Se agotó el límite de decisiones del agente antes de completar el paso.",
+      toolCalls,
+      nextConversation,
+    };
+  }
+
   /**
    * Extract tool calls from LLM response (simplified)
    * In a real implementation, this would parse tool_use blocks, function calls, etc.
@@ -274,6 +481,72 @@ Scenario: ${scenario.name}`,
     }
 
     return toolCalls;
+  }
+
+  private buildLiveStepPrompt(baseUrl: string | undefined, scenarioName: string, stepText: string): string {
+    const parts = [
+      `Scenario: ${scenarioName}`,
+      baseUrl ? `Base URL: ${baseUrl}` : null,
+      `Current step: ${stepText}`,
+      "Choose the next single MCP action needed to execute this step.",
+    ];
+    return parts.filter(Boolean).join("\n");
+  }
+
+  private summarizeToolResult(result: { type: "success" | "error"; content?: Array<{ type: string; text?: string }>; error?: string }): string {
+    const textParts = (result.content ?? [])
+      .map((part) => part.text?.trim())
+      .filter((part): part is string => Boolean(part));
+
+    const base = textParts.join("\n").trim() || result.error?.trim() || (result.type === "success" ? "Tool completed" : "Tool failed");
+    return base.length > 2000 ? `${base.slice(0, 2000)}...` : base;
+  }
+
+  private parseToolDecision(raw: string): ToolDecision | null {
+    const normalized = raw.trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const cleaned = normalized
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+
+    const candidates = [cleaned];
+    const objectMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (objectMatch && objectMatch[0] !== cleaned) {
+      candidates.push(objectMatch[0]);
+    }
+
+    for (const candidate of candidates) {
+      try {
+        const parsed = JSON.parse(candidate) as ToolDecision;
+        if (parsed && (parsed.kind === "tool" || parsed.kind === "done")) {
+          return parsed;
+        }
+      } catch {
+        // ignore invalid candidate
+      }
+    }
+
+    return null;
+  }
+
+  private asString(content: LLMMessage["content"] | undefined): string {
+    if (typeof content === "string") {
+      return content;
+    }
+
+    if (!Array.isArray(content)) {
+      return "";
+    }
+
+    return content
+      .map((part) => ("text" in part ? part.text : ""))
+      .join("")
+      .trim();
   }
 
   private isFatalStepError(errorMessage: string): boolean {

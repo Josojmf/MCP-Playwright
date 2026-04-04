@@ -66,7 +66,7 @@ completed: 2026-03-31
 
 1. **Task 1: Wire runAssertion into OrchestratorService** - `0db9872f` (feat)
 
-**Plan metadata:** _(docs commit pending)_
+**Plan metadata:** `079239d0` (docs: complete plan)
 
 ## Files Created/Modified
 

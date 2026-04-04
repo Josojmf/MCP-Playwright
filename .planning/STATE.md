@@ -2,12 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Milestone complete
-last_updated: "2026-04-01T15:10:17.772Z"
+status: Phase 11 executed; verification pending
+stopped_at: Phase 11 code execution complete; summaries written and manual verification passed
+last_updated: "2026-04-02T12:30:00.000Z"
 progress:
-  total_phases: 10
+  total_phases: 11
   completed_phases: 5
-  total_plans: 17
+  total_plans: 19
   completed_plans: 25
 ---
 
@@ -18,7 +19,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-03-30)
 
 **Core value:** Honest, reproducible comparison of MCP tool quality for E2E browser automation — exposing which MCPs actually work versus which ones hallucinate.
-**Current focus:** Phase 10 — cli-debug-trace-csv-scorecard
+**Current focus:** Phase 11 — execution-transparency-and-live-playwright-step-viewer
 
 ## Status
 
@@ -82,7 +83,18 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 
 ## Next Action
 
-Phase 09 complete. Ready for verification gate (gsd-verifier). Phase 10 pending user initiation.
+Phase 11 code execution is complete:
+
+- `11-01` Live MCP column grid with screenshot lightbox and suspicious step flagging
+- `11-02` Post-run scorecard with step replay and suspicious step flagging
+
+Recommended next action: run manual UI/UAT checks against the live run screen and scorecard states.
+
+## Session Continuity
+
+- **Last session:** 2026-04-02T13:47:37.2979542+02:00
+- **Stopped at:** Session resumed; Phase 11 confirmed as planned and ready to execute
+- **Resume file:** None
 
 ## Phase 09 Execution Details
 
@@ -92,6 +104,11 @@ Phase 09 complete. Ready for verification gate (gsd-verifier). Phase 10 pending 
 - **Release ready**: All decision points resolved, requirements satisfied
 
 ## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 11 added: Execution transparency and live Playwright step viewer
+- Phase 11 executed: live MCP columns now swap to a post-run scorecard with replay and shared suspicious-step styling
 
 ### Pending Todos
 

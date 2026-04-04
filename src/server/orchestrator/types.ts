@@ -1,4 +1,5 @@
 import { LLMMessage, ProviderConfig } from "../../shared/llm/types";
+import type { ToolDefinition } from "../../shared/registry/types";
 import { TokenBudget } from "../../shared/harness/TokenBudget";
 import { ScenarioPlan } from "../parser";
 
@@ -73,16 +74,29 @@ export interface MCPConfig {
   // Additional MCP-specific configuration
 }
 
+export interface MCPToolResult {
+  type: "success" | "error";
+  content?: Array<{ type: string; text?: string }>;
+  error?: string;
+}
+
+export interface MCPToolClient {
+  callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult>;
+}
+
 /**
  * Context for a single run execution
  */
 export interface RunContext {
   runId: string;
+  baseUrl?: string;
   scenario: ScenarioPlan;
   mcpConfig: MCPConfig;
   conversationHistory: LLMMessage[];
   tokenBudget: TokenBudget;
   abortSignal: AbortSignal;
+  toolClient?: MCPToolClient;
+  availableTools?: ToolDefinition[];
 }
 
 /**

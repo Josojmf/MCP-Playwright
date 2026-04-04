@@ -123,6 +123,7 @@ async function runHeadless(args: Record<string, string>): Promise<number> {
 
       const runContext: RunContext = {
         runId: `cli-${Date.now()}-${mcpId}`,
+        baseUrl,
         scenario,
         mcpConfig,
         conversationHistory: [],

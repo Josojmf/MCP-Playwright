@@ -20,6 +20,8 @@ import { RunHistoryList } from "@/components/history/RunHistoryList";
 import { RunDetailView } from "@/components/history/RunDetailView";
 import type { HistoryListResponse, RunDetail, RunDetailResponse, PersistedRun } from "@/types/history";
 import { MCP_REGISTRY } from "../shared/registry";
+import { McpColumnGrid } from "@/components/run/McpColumnGrid";
+import { RunScorecard } from "@/components/run/RunScorecard";
 
 type ThemeMode = "dark" | "light";
 export type RunState = "idle" | "estimating" | "awaiting_confirmation" | "running" | "completed" | "aborted" | "error";
@@ -72,12 +74,6 @@ export interface StepEvidence {
   timestamp: string;
   hallucinated?: boolean;
   needsReview?: boolean;
-}
-
-interface MediaPreview {
-  title: string;
-  screenshotUrl?: string;
-  videoUrl?: string;
 }
 
 interface LogEntry {
@@ -141,7 +137,6 @@ function App() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [lastScreenshotByMcp, setLastScreenshotByMcp] = useState<Record<string, string | null>>({});
   const [stepEvidenceByMcp, setStepEvidenceByMcp] = useState<Record<string, StepEvidence[]>>({});
-  const [mediaPreview, setMediaPreview] = useState<MediaPreview | null>(null);
   const [historyRuns, setHistoryRuns] = useState<PersistedRun[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -365,7 +360,6 @@ function App() {
     setProgressByMcp({});
     setLastScreenshotByMcp({});
     setStepEvidenceByMcp({});
-    setMediaPreview(null);
 
     try {
       const response = await fetch("/api/runs/start", {
@@ -904,102 +898,29 @@ function App() {
               </section>
 
               {Object.keys(progressByMcp).length > 0 ? (
-                <section className="panel panel-animated p-4 sm:p-5">
-                  <h2 className="section-title mb-3">Progreso por MCP</h2>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    {Object.entries(progressByMcp).map(([mcpId, progress]) => {
-                      const completion = progress.totalSteps > 0 ? Math.round((progress.completedSteps / progress.totalSteps) * 100) : 0;
-                      const evidenceItems = stepEvidenceByMcp[mcpId] ?? [];
-
-                      return (
-                        <article key={mcpId} className="rounded-xl border border-[var(--app-border)] bg-[var(--app-panel)] p-3 shadow-[var(--app-shadow-sm)] transition hover:-translate-y-[1px] hover:shadow-[var(--app-shadow-md)]">
-                          <div className="mb-2 flex items-center justify-between gap-2">
-                            <p className="truncate text-sm font-medium text-[var(--app-fg-strong)]">{mcpId}</p>
-                            <span className={`status-chip ${statusChipClass(progress.status)}`}>{progress.status}</span>
-                          </div>
-                          <p className="truncate text-xs text-[var(--app-muted)]">{progress.lastStepText || "Esperando primer paso..."}</p>
-                          <div className="mt-3 h-1.5 rounded-full bg-[var(--app-track)]">
-                            <div
-                              className="h-1.5 rounded-full bg-[var(--app-accent)]"
-                              style={{ width: `${completion}%` }}
-                            />
-                          </div>
-                          <div className="mt-2 flex items-center justify-between text-xs text-[var(--app-muted)]">
-                            <span>{progress.completedSteps}/{progress.totalSteps} pasos</span>
-                            <span>{progress.tokensUsed} tok</span>
-                          </div>
-                          <p className="mt-1 text-[11px] text-[var(--app-muted)]">
-                            Latencia red: {progress.networkOverheadMs}ms
-                          </p>
-                          {lastScreenshotByMcp[mcpId] ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setMediaPreview({
-                                  title: `Último screenshot · ${mcpId}`,
-                                  screenshotUrl: `/api/screenshots/${encodeURIComponent(String(lastScreenshotByMcp[mcpId]))}`,
-                                })
-                              }
-                              className="mt-2 block w-full"
-                            >
-                              <img
-                                src={`/api/screenshots/${encodeURIComponent(String(lastScreenshotByMcp[mcpId]))}`}
-                                alt={`screenshot ${mcpId}`}
-                                className="h-[92px] w-full rounded border border-[var(--app-border)] object-cover"
-                              />
-                            </button>
-                          ) : null}
-                          {evidenceItems.length > 0 ? (
-                            <div className="mt-3 space-y-2">
-                              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--app-muted)]">
-                                Evidencia por paso
-                              </p>
-                              {evidenceItems.slice(0, 3).map((item) => (
-                                <div key={item.id} className="rounded border border-[var(--app-border)] bg-[var(--app-panel-strong)] p-2">
-                                  <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-[var(--app-muted)]">
-                                    <span className={`status-chip ${item.status === "passed" ? "status-success" : "status-error"}`}>
-                                      {item.status}
-                                    </span>
-                                    <span>{item.latencyMs}ms · {item.tokensUsed} tok</span>
-                                  </div>
-                                  <p className="line-clamp-2 text-xs text-[var(--app-fg-strong)]">{item.stepText}</p>
-                                  {item.videoUrl ? (
-                                    <video
-                                      src={item.videoUrl}
-                                      controls
-                                      muted
-                                      className="mt-2 h-[88px] w-full rounded border border-[var(--app-border)] bg-black object-cover"
-                                    />
-                                  ) : item.screenshotId ? (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setMediaPreview({
-                                          title: `Paso verificado · ${mcpId}`,
-                                          screenshotUrl: `/api/screenshots/${encodeURIComponent(item.screenshotId ?? "")}`,
-                                          videoUrl: item.videoUrl ?? undefined,
-                                        })
-                                      }
-                                      className="mt-2 block w-full"
-                                    >
-                                      <img
-                                        src={`/api/screenshots/${encodeURIComponent(item.screenshotId)}`}
-                                        alt={`evidencia ${mcpId}`}
-                                        className="h-[88px] w-full rounded border border-[var(--app-border)] object-cover"
-                                      />
-                                    </button>
-                                  ) : (
-                                    <p className="mt-2 text-[11px] text-[var(--app-muted)]">Sin screenshot para este paso.</p>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
-                        </article>
-                      );
-                    })}
-                  </div>
-                </section>
+                runState === "running" ? (
+                  <section className="panel panel-animated p-4 sm:p-5">
+                    <h2 className="section-title mb-3">EJECUCIÓN EN VIVO</h2>
+                    <McpColumnGrid
+                      progressByMcp={progressByMcp}
+                      stepEvidenceByMcp={stepEvidenceByMcp}
+                      lastScreenshotByMcp={lastScreenshotByMcp}
+                      isRunning
+                      onAbort={() => {
+                        closeEventSource(eventSourceRef);
+                        setRunState("aborted");
+                      }}
+                    />
+                  </section>
+                ) : runState === "completed" || runState === "aborted" ? (
+                  <section className="panel panel-animated p-4 sm:p-5">
+                    <RunScorecard
+                      progressByMcp={progressByMcp}
+                      stepEvidenceByMcp={stepEvidenceByMcp}
+                      lastScreenshotByMcp={lastScreenshotByMcp}
+                    />
+                  </section>
+                ) : null
               ) : null}
             </>
           ) : null}
@@ -1122,28 +1043,6 @@ function App() {
         </div>
       ) : null}
 
-      {mediaPreview ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onClick={() => setMediaPreview(null)}>
-          <div
-            className="w-full max-w-3xl rounded border border-[var(--app-border-strong)] bg-[var(--app-panel-strong)] p-4"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold text-[var(--app-fg-strong)]">{mediaPreview.title}</h3>
-              <button type="button" className="app-soft-button" onClick={() => setMediaPreview(null)}>
-                Cerrar
-              </button>
-            </div>
-            {mediaPreview.videoUrl ? (
-              <video src={mediaPreview.videoUrl} controls autoPlay className="max-h-[70vh] w-full rounded border border-[var(--app-border)] bg-black" />
-            ) : mediaPreview.screenshotUrl ? (
-              <img src={mediaPreview.screenshotUrl} alt="evidencia ampliada" className="max-h-[70vh] w-full rounded border border-[var(--app-border)] object-contain" />
-            ) : (
-              <p className="text-sm text-[var(--app-muted)]">No hay contenido visual para este paso.</p>
-            )}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

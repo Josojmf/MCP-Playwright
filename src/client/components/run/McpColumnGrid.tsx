@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
 import { McpColumn } from "./McpColumn";
 import { ScreenshotLightbox } from "./ScreenshotLightbox";
 import type { ProgressState, StepEvidence } from "@/App";
@@ -57,31 +56,20 @@ export function McpColumnGrid({
   const gridColumns =
     mcpIds.length === 1 ? "1fr" : "1fr 1fr";
 
+  if (mcpIds.length === 0) {
+    return null;
+  }
+
   return (
     <div ref={containerRef}>
       {useTabLayout ? (
         <Tabs defaultValue={mcpIds[0]} className="w-full">
-          <TabsList
-            style={{
-              background: "var(--app-panel-strong)",
-              border: "1px solid var(--app-border)",
-              borderRadius: "4px",
-              padding: "4px",
-              gap: "4px",
-              height: "auto",
-              width: "fit-content",
-            }}
-          >
+          <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto rounded-[4px] border border-[var(--app-border)] bg-[var(--app-panel-strong)] p-1">
             {mcpIds.map((mcpId) => (
               <TabsTrigger
                 key={mcpId}
                 value={mcpId}
-                style={{
-                  height: "36px",
-                  padding: "0 12px",
-                  fontSize: "14px",
-                  borderRadius: "4px",
-                }}
+                className="h-9 rounded-[4px] border border-transparent px-3 text-sm font-normal text-[var(--app-muted)] hover:bg-[var(--app-panel)] hover:text-[var(--app-fg-strong)] data-[active]:border-[var(--app-border)] data-[active]:bg-[var(--app-panel)] data-[active]:font-semibold data-[active]:text-[var(--app-fg-strong)]"
               >
                 {mcpId}
               </TabsTrigger>
@@ -122,13 +110,13 @@ export function McpColumnGrid({
 
       {isRunning && (
         <div style={{ marginTop: "16px", display: "flex", justifyContent: "center" }}>
-          <Button
-            variant="destructive"
+          <button
+            type="button"
             onClick={onAbort}
-            style={{ width: "100%" }}
+            className="inline-flex w-full items-center justify-center rounded-lg border border-[color-mix(in_srgb,var(--app-danger)_45%,transparent)] bg-[color-mix(in_srgb,var(--app-danger)_85%,black)] px-4 py-2 text-sm font-medium text-white transition hover:brightness-105"
           >
-            Abortar Ejecuci\u00f3n
-          </Button>
+            Abortar Ejecución
+          </button>
         </div>
       )}
 

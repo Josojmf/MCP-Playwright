@@ -71,9 +71,15 @@ export class McpProcessManager implements BaseMcpClient {
     this.startedAt = new Date();
     this.crashed = false;
 
-    // Discover available tools via tools/list
-    const { tools } = await this.client.listTools();
-    this.tools = tools as ToolDefinition[];
+    // Discover available tools via tools/list.
+    // Some community MCP servers return non-canonical inputSchema documents that
+    // fail strict SDK parsing; do not abort spawn in that case.
+    try {
+      const { tools } = await this.client.listTools();
+      this.tools = tools as ToolDefinition[];
+    } catch {
+      this.tools = [];
+    }
 
     return { pid: this.pid!, startedAt: this.startedAt };
   }

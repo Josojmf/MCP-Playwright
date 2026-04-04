@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { FastifyBaseLogger } from "fastify";
 import { GherkinParserService, ScenarioPlan } from "./parser";
@@ -12,7 +11,7 @@ import { saveRun, saveScreenshot as saveRunScreenshot } from "./storage/sqlite";
 import { MCP_REGISTRY } from "../shared/registry";
 import { McpProcessManager } from "./mcp/McpProcessManager";
 import { preflight } from "./mcp/preflight";
-import { saveScreenshot as saveFileScreenshot } from "./storage/screenshots";
+import { saveScreenshot as saveFileScreenshot, resolveScreenshotImagePath } from "./storage/screenshots";
 import { validateStepWithVision, type StepValidation } from "./validation/visionValidator";
 import { InstrumentedMcpClient } from "./mcp/InstrumentedMcpClient";
 import { isStaleRefError, traceStaleRefRecovery } from "./mcp/stalenessRecovery";
@@ -24,10 +23,15 @@ export interface RunEstimateRequest {
   featureText: string;
   selectedMcpIds: string[];
   tokenCap: number;
-  provider: string;   // e.g. "openai", "claude", "azure", "openrouter"
+  provider?: string;   // e.g. "openai", "claude", "azure", "openrouter"
   model?: string;     // optional; "default" used as fallback
   lowCostAuditorModel?: string;      // default "gpt-4.1-mini"
   highAccuracyAuditorModel?: string;  // default "gpt-4.1"
+}
+
+interface NormalizedRunEstimateRequest extends RunEstimateRequest {
+  provider: string;
+  model: string;
 }
 
 export interface RunEstimate {
@@ -136,10 +140,10 @@ export class PhaseOneRunManager {
     const estimatedOutputTokens = this.estimateOutputTokens(stepCount, selectedMcpCount);
     const estimatedTotalTokens = estimatedInputTokens + estimatedOutputTokens;
 
-    const pricing = resolvePricing(normalizedInput.provider, normalizedInput.model ?? 'default');
+    const pricing = resolvePricing(normalizedInput.provider, normalizedInput.model);
     if (!pricing) {
       throw new Error(
-        `Unknown pricing for provider "${normalizedInput.provider}" model "${normalizedInput.model ?? 'default'}". ` +
+        `Unknown pricing for provider "${normalizedInput.provider}" model "${normalizedInput.model}". ` +
         `Check PRICING_TABLE in src/shared/pricing/table.ts.`
       );
     }
@@ -443,11 +447,14 @@ export class PhaseOneRunManager {
 
         const runContext: RunContext = {
           runId: `${session.id}:${mcpId}`,
+          baseUrl: session.config.baseUrl,
           scenario,
           mcpConfig,
           conversationHistory: [],
           tokenBudget: budget,
           abortSignal: session.abortController.signal,
+          toolClient: processManager,
+          availableTools: processManager.getTools(),
         };
 
         for await (const stepResult of orchestrator.runScenario(scenario, runContext)) {
@@ -747,7 +754,7 @@ export class PhaseOneRunManager {
     try {
       const screenshotBuffer = this.getPlaceholderScreenshot(stepText);
       const screenshotId = await saveFileScreenshot(screenshotBuffer, runId, stepId, SCREENSHOT_DIR);
-      const screenshotPath = join(SCREENSHOT_DIR, "screenshots", runId, stepId, `${screenshotId}.png`);
+      const screenshotPath = resolveScreenshotImagePath(runId, stepId, screenshotId, SCREENSHOT_DIR);
       return { screenshotId, screenshotPath };
     } catch (error) {
       this.logger.warn({ err: error, runId, stepId }, "No se pudo guardar screenshot de evidencia");
@@ -788,17 +795,69 @@ export class PhaseOneRunManager {
     }
   }
 
-  private normalizeInput(input: RunEstimateRequest): RunEstimateRequest {
+  private normalizeInput(input: RunEstimateRequest): NormalizedRunEstimateRequest {
     const baseUrl = this.normalizeBaseUrl(input.baseUrl ?? "");
     const featureText = this.normalizeFeatureText(input.featureText ?? "");
     const selectedMcpIds = this.normalizeSelectedMcpIds(input.selectedMcpIds ?? []);
+    const provider = this.normalizeProvider(input.provider);
+    const model = this.normalizeModel(input.model);
 
     return {
       ...input,
       baseUrl,
       featureText,
       selectedMcpIds,
+      provider,
+      model,
     };
+  }
+
+  private normalizeProvider(provider: string | undefined): string {
+    const normalized = provider?.trim().toLowerCase();
+    if (normalized) {
+      return normalized;
+    }
+
+    return this.detectDefaultProviderFromEnv();
+  }
+
+  private normalizeModel(model: string | undefined): string {
+    const normalized = model?.trim();
+    if (normalized) {
+      return normalized;
+    }
+
+    return "default";
+  }
+
+  private detectDefaultProviderFromEnv(): "openai" | "claude" | "azure" | "openrouter" {
+    const valueFromEnv = (...keys: string[]): string | undefined => {
+      for (const key of keys) {
+        const value = process.env[key];
+        if (value && value.trim()) {
+          return value.trim();
+        }
+      }
+      return undefined;
+    };
+
+    if (valueFromEnv("OPENAI_API_KEY")) {
+      return "openai";
+    }
+
+    if (valueFromEnv("ANTHROPIC_API_KEY")) {
+      return "claude";
+    }
+
+    if (valueFromEnv("AZURE_OPENAI_API_KEY")) {
+      return "azure";
+    }
+
+    if (valueFromEnv("OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY")) {
+      return "openrouter";
+    }
+
+    return "openai";
   }
 
   private normalizeSelectedMcpIds(selectedMcpIds: string[]): string[] {

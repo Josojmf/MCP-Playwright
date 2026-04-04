@@ -1,4 +1,4 @@
-import { Dialog, DialogPortal } from "@/components/ui/dialog";
+import { Dialog, DialogClose, DialogHeader, DialogPortal, DialogTitle } from "@/components/ui/dialog";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { cn } from "@/lib/utils";
 import { XIcon } from "lucide-react";
@@ -13,9 +13,8 @@ interface ScreenshotLightboxProps {
 
 export function ScreenshotLightbox({ open, onOpenChange, title, screenshotUrl }: ScreenshotLightboxProps) {
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => onOpenChange(nextOpen)}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
-        {/* Custom overlay: flat black/55, no blur — per 11-UI-SPEC.md anti-blur rule */}
         <DialogPrimitive.Backdrop
           data-slot="dialog-overlay"
           className="fixed inset-0 isolate z-50 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0"
@@ -40,33 +39,15 @@ export function ScreenshotLightbox({ open, onOpenChange, title, screenshotUrl }:
             gap: "12px",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-            <DialogPrimitive.Title
-              data-slot="dialog-title"
-              style={{
-                fontSize: "16px",
-                fontWeight: 600,
-                color: "var(--app-fg-strong)",
-                letterSpacing: "-0.01em",
-                lineHeight: 1.2,
-              }}
-            >
+          <DialogHeader className="flex-row items-center justify-between gap-2">
+            <DialogTitle className="text-base leading-tight font-semibold tracking-[-0.01em] text-[var(--app-fg-strong)]">
               {title}
-            </DialogPrimitive.Title>
-            <DialogPrimitive.Close
-              data-slot="dialog-close"
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Cerrar"
-                />
-              }
-            >
+            </DialogTitle>
+            <DialogClose render={<Button variant="ghost" size="icon-sm" aria-label="Cerrar" />}>
               <XIcon />
               <span className="sr-only">Cerrar</span>
-            </DialogPrimitive.Close>
-          </div>
+            </DialogClose>
+          </DialogHeader>
           <img
             src={screenshotUrl}
             alt={title}

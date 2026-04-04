@@ -461,8 +461,32 @@ Plans:
 
 **Coverage: 54/54 v1 requirements mapped — no orphans.**
 
+### Phase 11: Execution transparency and live Playwright step viewer
+
+**Goal**: The run screen exposes a true execution-transparency flow: live per-MCP columns while a benchmark is running, then an inline scorecard with replay and suspicious-step surfacing once the run finishes.
+
+**Why Now**: The benchmark already captures progress, screenshots, and step-level validation data. This phase converts that data into the UI surface users actually need to compare MCP behavior run-by-run.
+
+**Depends on**: Phase 10
+
+**Requirements**: UI-04, UI-05, UI-06, UI-07
+
+**Plans:** 2/2 plans complete
+
+Plans:
+- [x] 11-01-PLAN.md — Grid de columnas por MCP con screenshot siempre visible, modal lightbox y marcado visual de pasos `HALLUCINATED` / `NEEDS REVIEW`
+- [x] 11-02-PLAN.md — Scorecard post-run con tabla de métricas por MCP, replay expandible por paso y reutilización del flagging sospechoso
+
+**Success Criteria**:
+1. Runs in `running` state render the live column view instead of stacked progress cards.
+2. Runs in `completed` or `aborted` state swap inline to a scorecard with replay data intact.
+3. `hallucinated` and `needsReview` steps are visually obvious in both live and post-run states.
+
+**Verification**:
+- `npm run typecheck`
+- `npm run build`
+
 ---
 
 *Roadmap created: 2026-03-30*
-*Last updated: 2026-03-31 after gap closure phases 7–10 added*
-
+*Last updated: 2026-04-02 after Phase 11 execution*

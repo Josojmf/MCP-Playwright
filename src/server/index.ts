@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import Fastify from "fastify";
 import { BudgetExceededError } from "../shared/harness/TokenBudget";
 import { PhaseOneRunManager, RequestValidationError, RunEstimateRequest } from "./runManager";
@@ -249,6 +250,10 @@ const start = async () => {
 };
 
 export { start };
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void start();
+}
 
 // Graceful shutdown
 process.on("SIGINT", () => {

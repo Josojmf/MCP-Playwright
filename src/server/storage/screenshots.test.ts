@@ -159,4 +159,17 @@ describe('Screenshots Storage', () => {
       assert.strictEqual(entry.toolCallId, toolCallId);
     }
   });
+
+  it('debería guardar screenshot con runId no seguro para path (Windows-safe)', async () => {
+    const unsafeRunId = '73e935bb-aed2-4f31-9b03-7b6210ec0900::@playwright/mcp';
+    const unsafeStepId = '3cb06fc8-f9c2-4fc6-b0d2-25c449496fbe';
+    const buffer = Buffer.from('unsafe-path-test');
+
+    const screenshotId = await saveScreenshot(buffer, unsafeRunId, unsafeStepId, TEST_DATA_DIR);
+    const retrievedBuffer = await getScreenshot(screenshotId, TEST_DATA_DIR);
+
+    assert.ok(screenshotId, 'debe retornar screenshotId para runId con caracteres especiales');
+    assert.ok(retrievedBuffer, 'debe recuperar screenshot guardado con runId no seguro');
+    assert.deepStrictEqual(retrievedBuffer, buffer, 'contenido debe coincidir');
+  });
 });

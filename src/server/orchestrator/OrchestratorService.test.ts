@@ -62,6 +62,54 @@ class AuthFailLLMProvider implements LLMProvider {
   }
 }
 
+class JsonToolLoopProvider implements LLMProvider {
+  private calls = 0;
+
+  async complete(request: LLMRequest): Promise<LLMResponse> {
+    this.calls += 1;
+    const content = this.calls === 1
+      ? JSON.stringify({
+          kind: "tool",
+          toolName: "browser_navigate",
+          arguments: { url: "https://example.com" },
+          reason: "open the target page",
+        })
+      : JSON.stringify({
+          kind: "done",
+          status: "passed",
+          message: "La navegación se completó correctamente.",
+        });
+
+    return {
+      id: randomUUID(),
+      model: request.model,
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content,
+          },
+          finishReason: "stop",
+        },
+      ],
+      usage: {
+        promptTokens: 100,
+        completionTokens: 25,
+        totalTokens: 125,
+      },
+    };
+  }
+
+  async *stream(_request: LLMRequest): AsyncIterable<LLMChunk> {
+    yield { index: 0, delta: "", finishReason: "stop" };
+  }
+
+  async estimateCost(_inputTokens: number, _outputTokens: number, _model: string): Promise<number> {
+    return 0;
+  }
+}
+
 test("StepResult represents all states with tokens and latency", async (t) => {
   await t.test("should handle running state", () => {
     const result: StepResult = {
@@ -530,3 +578,56 @@ test("runScenario corta temprano ante error fatal de autenticación", async () =
   assert.equal(results[0].stepIndex, 0);
 });
 
+test("runScenario uses live MCP tool loop when tool client and tools are provided", async () => {
+  const provider = new JsonToolLoopProvider();
+  const orchestrator = new OrchestratorService(provider);
+  const budget = new TokenBudget({ hardCapTokens: 10000, warnThresholdRatio: 0.8 }, () => {});
+  const toolInvocations: Array<{ name: string; args: Record<string, unknown> }> = [];
+
+  const scenario: ScenarioPlan = {
+    id: "scenario-live-mcp",
+    name: "Live MCP Scenario",
+    tags: [],
+    steps: [
+      {
+        keyword: "Given",
+        canonicalType: "given",
+        text: 'I open "https://example.com"',
+      },
+    ],
+  };
+
+  const ctx: RunContext = {
+    runId: randomUUID(),
+    baseUrl: "https://example.com",
+    scenario,
+    mcpConfig: { id: "@playwright/mcp", provider: { provider: "openai", model: "gpt-4" } as ProviderConfig },
+    conversationHistory: [],
+    tokenBudget: budget,
+    abortSignal: new AbortController().signal,
+    availableTools: [
+      { name: "browser_navigate", description: "Navigate to URL" },
+      { name: "browser_snapshot", description: "Take ARIA snapshot" },
+    ],
+    toolClient: {
+      async callTool(name: string, args: Record<string, unknown>) {
+        toolInvocations.push({ name, args });
+        return {
+          type: "success",
+          content: [{ type: "text", text: "Navigation complete" }],
+        };
+      },
+    },
+  };
+
+  const results: StepResult[] = [];
+  for await (const result of orchestrator.runScenario(scenario, ctx)) {
+    results.push(result);
+  }
+
+  assert.equal(results.length, 1);
+  assert.equal(results[0].status, "passed");
+  assert.equal(results[0].toolCalls.length, 1);
+  assert.equal(results[0].toolCalls[0].toolName, "browser_navigate");
+  assert.deepEqual(toolInvocations, [{ name: "browser_navigate", args: { url: "https://example.com" } }]);
+});

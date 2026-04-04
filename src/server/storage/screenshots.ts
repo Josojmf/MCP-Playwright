@@ -2,6 +2,30 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
+function sanitizePathSegment(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "empty";
+  }
+
+  return trimmed
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
+    .replace(/\s+/g, "_");
+}
+
+function resolveRunStepDir(dataDir: string, runId: string, stepId: string): string {
+  return path.join(dataDir, "screenshots", sanitizePathSegment(runId), sanitizePathSegment(stepId));
+}
+
+export function resolveScreenshotImagePath(
+  runId: string,
+  stepId: string,
+  screenshotId: string,
+  dataDir: string = process.env.DATA_DIR || "./data"
+): string {
+  return path.join(resolveRunStepDir(dataDir, runId, stepId), `${screenshotId}.png`);
+}
+
 /**
  * Metadata para un screenshot capturado
  */
@@ -33,7 +57,7 @@ export async function saveScreenshot(
   const timestamp = new Date().toISOString();
 
   // Crear directorio: ${dataDir}/screenshots/{runId}/{stepId}/
-  const screenshotDir = path.join(dataDir, 'screenshots', runId, stepId);
+  const screenshotDir = resolveRunStepDir(dataDir, runId, stepId);
   await fs.mkdir(screenshotDir, { recursive: true });
 
   // Guardar imagen binaria
@@ -110,7 +134,7 @@ export async function listScreenshotsByStep(
   stepId: string,
   dataDir: string = process.env.DATA_DIR || './data'
 ): Promise<ScreenshotMetadata[]> {
-  const stepDir = path.join(dataDir, 'screenshots', runId, stepId);
+  const stepDir = resolveRunStepDir(dataDir, runId, stepId);
 
   try {
     const files = await fs.readdir(stepDir);
@@ -149,7 +173,7 @@ export async function listScreenshotsByRun(
 ): Promise<
   Array<ScreenshotMetadata & { runId: string; stepId: string }>
 > {
-  const runDir = path.join(dataDir, 'screenshots', runId);
+  const runDir = path.join(dataDir, "screenshots", sanitizePathSegment(runId));
 
   try {
     const steps = await fs.readdir(runDir);
