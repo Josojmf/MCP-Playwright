@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Milestone complete
-stopped_at: Completed 11-04-PLAN.md — screenshot lightbox modal fix
-last_updated: "2026-04-04T10:55:07.509Z"
+status: Phase 13 in progress; 13-01 complete
+stopped_at: Completed 13-01-PLAN.md
+last_updated: "2026-04-04T21:53:29.124Z"
 progress:
-  total_phases: 11
-  completed_phases: 6
-  total_plans: 21
-  completed_plans: 29
+  total_phases: 13
+  completed_phases: 7
+  total_plans: 29
+  completed_plans: 34
 ---
 
 # Project State
@@ -19,7 +19,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-03-30)
 
 **Core value:** Honest, reproducible comparison of MCP tool quality for E2E browser automation — exposing which MCPs actually work versus which ones hallucinate.
-**Current focus:** Phase 11 — execution-transparency-and-live-playwright-step-viewer
+**Current focus:** Phase 13 execution — excelencia-y-estabilizacion-de-testing
 
 ## Status
 
@@ -36,7 +36,10 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 - [x] Phase 7 completed
 - [x] Phase 8 completed
 - [x] Phase 9 completed (3 plans: 09-01, 09-02, 09-03)
-- [ ] Phase 10 pending
+- [x] Phase 10 completed
+- [x] Phase 11 completed
+- [x] Phase 12 completed
+- [~] Phase 13 in progress (`13-01` complete, `13-02` to `13-04` pending)
 
 ## Decisions
 
@@ -52,16 +55,19 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 - [Phase 07-04]: Stale-ref errors annotate step message with [STALE-REF] prefix and skip benchmark failure counting; run-level catch also traces stale-ref via traceStaleRefRecovery()
 - [Phase 08-real-mcp-process-protocol]: McpProcessManager implements BaseMcpClient using @modelcontextprotocol/sdk Client + StdioClientTransport; registry-driven spawnCommand; health check via successful initialize handshake
 - [Phase 09]: Two-tier auditor model fields (lowCostAuditorModel + highAccuracyAuditorModel) replace single auditorModel in RunConfig; vision LLM called for passed steps only per D-05/D-08/D-10
-- [Phase 11-03]: Three-branch runState render in App.tsx: running gets dedicated live surface viewport, pre-run layout is fully hidden, post-run shows scorecard
-- [Phase 11-03]: McpColumnGrid ResizeObserver guarded with typeof check + try/catch; fallback width seed from getBoundingClientRect() ensures grid vs tabs is deterministic without observer
-- [Phase 11]: Use shared DialogContent anatomy for ScreenshotLightbox; add overlayClassName prop to DialogContent for dark non-blurred overlay override
+- [Phase 13]: Keep npm test bound to the fast lane and move slower real-I/O seams behind an explicit smoke inventory.
+- [Phase 13]: Route test, test:fast, test:smoke, and test:ci through one lane runner so lane policy stays centralized.
 
 ## Metrics
 
 - **Phases completed:** 9/10
 - **Plans completed:** 22/23 (Phase 09: 3/3 complete)
 - **TypeScript:** `tsc --noEmit` passing (0 errors)
-- **Tests:** `npm test` passing (125/125)
+- **Tests:** `npm test` passing via the fast lane runner (160/160)
+
+## Performance Metrics
+
+- **13-01:** 8 min, 2 tasks, 4 primary files modified, verification via `node scripts/test/run-lane.mjs fast --list`, `node scripts/test/run-lane.mjs smoke --list`, and `npm test`
 
 ## Phase 09 Execution Summary
 
@@ -86,18 +92,17 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 
 ## Next Action
 
-Phase 11 code execution is complete:
+Phase 13 execution is underway:
 
-- `11-01` Live MCP column grid with screenshot lightbox and suspicious step flagging
-- `11-02` Post-run scorecard with step replay and suspicious step flagging
+- `13-01` completed: fast/smoke lane runner, manifest, and README workflow
 
-Recommended next action: run manual UI/UAT checks against the live run screen and scorecard states.
+Recommended next action: execute `13-02-PLAN.md` to prune weak contract tests and tighten architectural guards.
 
 ## Session Continuity
 
-- **Last session:** 2026-04-04T10:54:06.123Z
-- **Stopped at:** Completed 11-04-PLAN.md — screenshot lightbox modal fix
-- **Resume file:** None
+- **Last session:** 2026-04-04T21:53:29.118Z
+- **Stopped at:** Completed 13-01-PLAN.md
+- **Resume file:** .planning/phases/13-excelencia-y-estabilizacion-de-testing/13-02-PLAN.md
 
 ## Phase 09 Execution Details
 
@@ -112,6 +117,7 @@ Recommended next action: run manual UI/UAT checks against the live run screen an
 
 - Phase 11 added: Execution transparency and live Playwright step viewer
 - Phase 11 executed: live MCP columns now swap to a post-run scorecard with replay and shared suspicious-step styling
+- Phase 13 added: Excelencia y Estabilizacion de Testing
 
 ### Pending Todos
 

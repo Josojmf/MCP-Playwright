@@ -395,6 +395,9 @@ Plans:
 | 8. Real MCP Process Protocol & Integration Fixes | 0/4 | Pending | — |
 | 9. Real Vision LLM Validation | 3/3 | Completed | 2026-04-01 |
 | 10. CLI Debug Trace & CSV Scorecard | 0/2 | Pending | — |
+| 11. Execution transparency and live Playwright step viewer | 2/2 | Completed | 2026-04-04 |
+| 12. Mejorar fiabilidad, seguridad y transparencia del ejecutor de tests para QA | 4/4 | Completed | 2026-04-04 |
+| 13. Excelencia y Estabilizacion de Testing | 1/4 | In Progress | 2026-04-04 |
 
 ---
 
@@ -471,7 +474,7 @@ Plans:
 
 **Requirements**: UI-04, UI-05, UI-06, UI-07
 
-**Plans:** 4/4 plans complete
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 11-01-PLAN.md — Grid de columnas por MCP con screenshot siempre visible, modal lightbox y marcado visual de pasos `HALLUCINATED` / `NEEDS REVIEW`
@@ -486,7 +489,63 @@ Plans:
 - `npm run typecheck`
 - `npm run build`
 
+### Phase 12: Mejorar fiabilidad, seguridad y transparencia del ejecutor de tests para QA
+
+**Goal**: Harden the real test execution path for QA use so benchmark runs are safer to execute, easier to audit, and clearer about when results are trustworthy versus degraded.
+
+**Why Now**: The benchmark already has real MCP execution, persisted history, and live run surfaces. This phase closes the remaining trust gaps in assertion safety, evidence persistence, reproducible configuration, and QA-facing audit transparency before further expanding the testing surface.
+
+**Depends on**: Phase 11
+
+**Requirements**: VALID-01, VALID-02, EXEC-04, UI-04, UI-05, HIST-01, HIST-02, HIST-03
+
+**Plans:** 4/4 plans complete
+
+Plans:
+- [x] 12-01-PLAN.md — Replace dynamic assertion execution with an allowlisted Playwright assertion runner and regression coverage
+- [x] 12-02-PLAN.md — Make provider and model selection explicit and reproducible across UI and backend run payloads
+- [x] 12-03-PLAN.md — Persist real screenshots, enriched tool traces, trust state, and reproducible execution config in storage and history/export APIs
+- [x] 12-04-PLAN.md — Surface `AUDITABLE`/`DEGRADED` trust state, degradation reasons, execution config, and step traces in live and historical UI views
+
+**Success Criteria**:
+1. The assertion execution path no longer evaluates arbitrary translated code and only auto-runs explicit allowlisted patterns.
+2. Each run persists its real evidence and exact execution config, and missing evidence is surfaced as an explicit degraded trust state.
+3. History and export artifacts include enough trust and trace context for QA to audit a run without consulting server logs.
+4. Live and historical UI surfaces clearly communicate whether a run is auditable or degraded and why.
+
+**Verification**:
+- `npm test`
+- `npm run build`
+
+### Phase 13: Excelencia y Estabilizacion de Testing
+
+**Goal**: Analizar de forma exhaustiva la base de codigo actual para cerrar gaps de validacion y refactorizar la infraestructura de pruebas automatizadas para mejorar de forma sustancial su fiabilidad, reporting y velocidad de ejecucion.
+
+**Why Now**: Con la ruta de ejecucion y la transparencia de auditoria endurecidas en Phase 12, el siguiente cuello de botella es la propia plataforma de testing. Antes de seguir ampliando funcionalidades, conviene estabilizar la suite, reducir flakiness, acelerar tiempos de CI/CD y elevar la calidad del diagnostico de fallos.
+
+**Depends on**: Phase 12
+
+**Requirements**:
+- Auditoria de tests actuales frente a la implementacion real para detectar y cerrar escenarios no cubiertos
+- Eliminacion del flakiness estabilizando aserciones, waits y gestion del estado global
+- Reduccion del tiempo de ejecucion con paralelizacion segura, mocking eficiente y setups/teardowns optimizados
+- Reporting enriquecido con logs, trazas, capturas y reportes legibles para debugging rapido en CI/CD
+
+**Plans:** 1/4 plans executed
+
+Plans:
+- [x] 13-01-PLAN.md — Create the fast/smoke lane runner, manifest, and README workflow so `npm test` becomes the deterministic default lane
+- [ ] 13-02-PLAN.md — Prune weak regex-only contract tests and upgrade the retained source-shape guards around architectural invariants
+- [ ] 13-03-PLAN.md — Expand fast behavioral coverage for runManager, OrchestratorService, and CLI with deterministic fixtures
+- [ ] 13-04-PLAN.md — Move real persistence/filesystem tests into an explicit smoke lane and add structured failure bundles
+
+**Success Criteria**:
+1. Los scripts de tests se ejecutan de principio a fin sin falsos positivos ni falsos negativos.
+2. El tiempo total de ejecucion de la suite se reduce de forma significativa.
+3. Los reportes de error incluyen contexto suficiente para diagnosticar el problema sin reejecutar localmente.
+4. Todas las funcionalidades core quedan cubiertas por pruebas automatizadas estables.
+
 ---
 
 *Roadmap created: 2026-03-30*
-*Last updated: 2026-04-02 after Phase 11 execution*
+*Last updated: 2026-04-04 after 13-01 execution and roadmap sync*
