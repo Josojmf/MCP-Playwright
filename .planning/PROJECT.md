@@ -2,117 +2,69 @@
 
 ## What This Is
 
-A research and benchmarking platform for comparing the efficiency of AI-driven MCP (Model Context Protocol) tools for browser automation in QA E2E functional testing. Users define test scenarios as Gherkin BDD scripts with a base URL, and the platform runs them in parallel across multiple Playwright-compatible MCP servers using a provider-agnostic LLM orchestrator. Results are presented as a full scorecard: quality (accuracy, hallucination detection), cost (tokens, $), and reliability (consistency across runs).
+A benchmarking and QA research platform for comparing MCP-driven browser automation systems against the same Gherkin scenarios. The product runs scenarios across multiple Playwright-compatible MCP servers, records execution evidence, and surfaces quality, trust, cost, and reliability differences in a shared UI and CLI.
 
 ## Core Value
 
-Honest, reproducible comparison of MCP tool quality for E2E browser automation — exposing which MCPs actually work versus which ones hallucinate their way through tests.
+Honest, reproducible comparison of MCP tool quality for E2E browser automation.
+
+## Current State
+
+`v1.0` was archived on 2026-04-04 after Phases 1-13. The shipped codebase includes provider abstraction, registry-driven MCP execution, live run transparency, QA trust-state surfaces, local history/export plumbing, and a substantially improved automated test stack.
+
+The milestone audit was accepted with known live-path gaps. The most important remaining product work is not new surface area; it is closing the mismatch between what the live runtime claims and what the current execution path actually wires.
+
+See:
+
+- `.planning/milestones/v1.0-ROADMAP.md`
+- `.planning/milestones/v1.0-REQUIREMENTS.md`
+- `.planning/milestones/v1.0-MILESTONE-AUDIT.md`
 
 ## Requirements
 
 ### Validated
 
-- Provider-agnostic LLM orchestrator with system prompt assembly (Validated in Phase 07: wire-dead-modules)
-- Token budget enforcement with hard cap and warn threshold (Validated in Phase 07: wire-dead-modules)
-- Dual-layer step validation: runAssertion() wired for Then steps — assertion failures override LLM-reported pass (Validated in Phase 07: wire-dead-modules)
-- InstrumentedMcpClient screenshot pipeline wired into executeMcpRun() (Validated in Phase 07: wire-dead-modules)
-- Stale ARIA ref detection and tracing in benchmark execution path (Validated in Phase 07: wire-dead-modules)
-- Real MCP JSON-RPC stdio communication via @modelcontextprotocol/sdk — initialize handshake, tools/list, tools/call (Validated in Phase 08: real-mcp-process-protocol)
-- Loop detection on actual MCP tool call fingerprints (name + args) — not Gherkin step text (Validated in Phase 08: real-mcp-process-protocol)
-- estimateRun() pricing from live resolvePricing() table — not hardcoded constants (Validated in Phase 08: real-mcp-process-protocol)
-- CLI uses real createProvider() factory — real LLM responses, not mock synthetic output (Validated in Phase 08: real-mcp-process-protocol)
-
-- Live run viewport takeover: McpColumnGrid becomes primary content during active runs, editor/sidebar hidden (Validated in Phase 11: execution-transparency-and-live-playwright-step-viewer)
-- ResizeObserver guarded against unavailable/throwing API — grid width deterministic on first render (Validated in Phase 11: execution-transparency-and-live-playwright-step-viewer)
-- ScreenshotLightbox rebuilt with shared Dialog anatomy — modal renders screenshot content correctly (Validated in Phase 11: execution-transparency-and-live-playwright-step-viewer)
+- Provider-agnostic LLM adapter architecture and MCP registry scaffolding shipped in `v1.0`.
+- Real MCP stdio JSON-RPC process management shipped in `v1.0`.
+- Live run transparency and post-run scorecard surfaces shipped in `v1.0`.
+- QA trust-state, degradation reason, and execution-config visibility shipped in `v1.0`.
+- Fast/smoke lane testing infrastructure and deterministic runtime fixtures shipped in `v1.0`.
 
 ### Active
 
-**Orchestration**
-- [ ] Provider-agnostic LLM orchestrator service (adapter pattern) — supports OpenRouter, Azure OpenAI, OpenAI, Claude API with zero coupling to any specific provider
-- [ ] OpenRouter as default orchestrator implementation
-- [ ] Orchestrator parses Gherkin BDD scripts and dispatches step-by-step instructions to MCP servers
-- [ ] Per-run token budget cap with cost estimation before execution and real-time cost dashboard
-- [ ] Per-MCP token ceiling — exceeding limit marks MCP result as incomplete
-
-**MCP Execution**
-- [ ] Support for all available Playwright-compatible MCP servers (pluggable registry)
-- [ ] Parallel execution of same Gherkin scenario across all selected MCPs simultaneously
-- [ ] Hard timeout per Gherkin step (configurable) — timeout = step fail
-- [ ] Loop detection — abort MCP if identical action repeats N times (prevents runaway token burn)
-- [ ] Auto-retry failed steps N times (configurable); determinism score across 3 runs per MCP
-
-**Validation & Anti-Hallucination**
-- [ ] Screenshot captured at every Gherkin step for each MCP
-- [ ] Dual-layer step validation: Playwright expect() assertions on Then clauses + LLM screenshot analysis
-- [ ] Suspicious step flagging for human review in scorecard (when assertion and LLM confidence diverge)
-- [ ] Ground truth: Gherkin Then clauses translated into Playwright expect() calls that run independently
-
-**UI**
-- [ ] Scenario editor: base URL + Gherkin BDD script input
-- [ ] MCP selector: choose which MCPs to include in a run (default: all)
-- [ ] Real-time run progress via SSE/WebSocket — per-MCP step status streams live as it executes
-- [ ] Full scorecard view: metrics table (pass/fail per step, time, tokens, cost) + step-by-step replay with screenshots per MCP
-- [ ] Cumulative cost tracker dashboard across sessions
-- [ ] Run history: persisted locally, exportable as JSON and CSV
-- [ ] Technical + polished visual design (PostHog/Datadog aesthetic) — dark/light mode, data-dense, zero fluff
-
-**CLI**
-- [ ] CI-ready headless runner: same Gherkin + URL scenarios without browser, outputs structured results
-- [ ] Developer debug mode: inspect MCP responses, replay steps, diagnose failures from terminal
+- Enforce translated `Then` assertions in the real live-MCP execution path.
+- Pass screenshot evidence through real tool calls into persistence and vision validation.
+- Make Browserbase execution real or remove it from the default selectable inventory.
+- Wire stale-ref retry into the production run path.
+- Unify CLI benchmark execution with `runManager`.
+- Fix per-run CSV export so it matches the promised per-MCP scorecard contract.
+- Backfill milestone-level verification coverage where earlier phases still lack `*-VERIFICATION.md`.
 
 ### Out of Scope
 
-- Managing or hosting MCP servers — playground connects to them, does not run infrastructure
-- Writing Gherkin scripts for the user — input is user-provided
-- Real user management / auth — single-user local tool for v1
-- Custom LLM fine-tuning or model training
-- Mobile browser automation (desktop/headless only for v1)
+- Managing or hosting MCP server infrastructure.
+- Writing Gherkin scripts for the user.
+- Multi-user auth and SaaS account management.
+- Model fine-tuning or custom model training.
+- Mobile browser automation for `v1`.
 
 ## Context
 
-- **Domain**: MCP (Model Context Protocol) is the emerging standard for AI agents to interact with tools. Browser automation MCPs (like @playwright/mcp) let LLMs drive browsers natively. The quality gap between different MCPs and models is largely unmeasured — this platform fills that gap.
-- **Key risk**: AI hallucination in step reporting is the #1 reliability problem. An MCP can claim success while the DOM state tells a different story. The dual-layer validation (Playwright assertions + LLM screenshot analysis) directly addresses this.
-- **Flakiness**: E2E tests are notoriously flaky. The retry + determinism scoring approach distinguishes "MCP is bad" from "test is flaky".
-- **Cost discipline**: Parallel multi-MCP runs multiply token spend quickly. Budget caps and loop detection are first-class features, not afterthoughts.
-
-## Constraints
-
-- **Tech Stack — Frontend**: React + Tailwind + shadcn/ui — component-owned, Radix primitives, no vibe-coded UI
-- **Tech Stack — Backend**: Fastify (Node.js) — fast, schema-first API server
-- **Tech Stack — Realtime**: SSE or WebSocket for live step streaming during runs
-- **Architecture — Orchestrator**: Strict adapter pattern, zero hard dependency on any LLM provider. Swapping OpenRouter for Azure OpenAI, Claude API, or OpenAI must require only a config change.
-- **Architecture — MCPs**: Pluggable MCP registry — adding or removing MCP servers requires no core changes
-- **GSD Skills**: All phases use gsd:ui-phase (design contracts) + gsd:plan-phase + gsd:execute-phase + gsd:verify-work + gsd:ui-review
+- Frontend: React, Tailwind, shadcn/ui.
+- Backend: Fastify, Node.js, SQLite-backed local persistence.
+- Realtime delivery: SSE.
+- Current planning surface is reset for the next milestone; `v1.0` planning is archived under `.planning/milestones/`.
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Provider-agnostic orchestrator via adapter pattern | Avoid lock-in to OpenRouter; any LLM provider must be swappable via config | — Pending |
-| Dual-layer step validation (Playwright + LLM screenshot) | LLM alone can hallucinate pass; Playwright alone can't catch semantic errors | — Pending |
-| Parallel MCP execution (same scenario, all MCPs simultaneously) | Eliminates time-ordering bias in comparison; faster overall runs | — Pending |
-| Determinism score (3 runs per MCP) | Separates flaky tests from genuinely unreliable MCPs | — Pending |
-| Loop detection + hard step timeout | Prevents runaway token burn from stuck MCPs | — Pending |
-| shadcn/ui + Tailwind over full component library | Owned components, no runtime dependency, consistent with Radix primitives | — Pending |
-| Run history exportable as JSON + CSV | Enables external analysis and longitudinal MCP quality tracking | — Pending |
-
-## Evolution
-
-This document evolves at phase transitions and milestone boundaries.
-
-**After each phase transition** (via `/gsd:transition`):
-1. Requirements invalidated? → Move to Out of Scope with reason
-2. Requirements validated? → Move to Validated with phase reference
-3. New requirements emerged? → Add to Active
-4. Decisions to log? → Add to Key Decisions
-5. "What This Is" still accurate? → Update if drifted
-
-**After each milestone** (via `/gsd:complete-milestone`):
-1. Full review of all sections
-2. Core Value check — still the right priority?
-3. Audit Out of Scope — reasons still valid?
-4. Update Context with current state
+| Adapter-based LLM orchestration | Provider swaps must remain config-only | ✓ Shipped |
+| Registry-driven MCP integration | New MCPs should be added without core rewrites | ✓ Shipped |
+| Live transparency plus post-run scorecard | Benchmark credibility depends on visible execution evidence | ✓ Shipped |
+| Trust-state and degraded-run surfacing | QA needs to know when results are auditable versus suspect | ✓ Shipped |
+| Fast/smoke test split | Daily development should stay deterministic while real-I/O seams remain covered | ✓ Shipped |
+| Live-path assertion and evidence wiring | Truthfulness of benchmark results depends on it | ⚠ Still incomplete |
 
 ---
-*Last updated: 2026-04-01 after Phase 08 completion — real-mcp-process-protocol complete*
+*Last updated: 2026-04-05 after archiving v1.0 with accepted audit gaps*

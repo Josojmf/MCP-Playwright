@@ -392,9 +392,9 @@ Política:
 
 Inventario smoke inicial:
 
-- `src/server/api/history.test.ts`
-- `src/server/storage/sqlite.test.ts`
-- `src/server/storage/screenshots.test.ts`
+- `src/server/api/history.smoke.test.ts`
+- `src/server/storage/sqlite.smoke.test.ts`
+- `src/server/storage/screenshots.smoke.test.ts`
 
 La regla operativa de Phase 13 es:
 
