@@ -22,6 +22,10 @@ Honest, reproducible comparison of MCP tool quality for E2E browser automation �
 - estimateRun() pricing from live resolvePricing() table — not hardcoded constants (Validated in Phase 08: real-mcp-process-protocol)
 - CLI uses real createProvider() factory — real LLM responses, not mock synthetic output (Validated in Phase 08: real-mcp-process-protocol)
 
+- Live run viewport takeover: McpColumnGrid becomes primary content during active runs, editor/sidebar hidden (Validated in Phase 11: execution-transparency-and-live-playwright-step-viewer)
+- ResizeObserver guarded against unavailable/throwing API — grid width deterministic on first render (Validated in Phase 11: execution-transparency-and-live-playwright-step-viewer)
+- ScreenshotLightbox rebuilt with shared Dialog anatomy — modal renders screenshot content correctly (Validated in Phase 11: execution-transparency-and-live-playwright-step-viewer)
+
 ### Active
 
 **Orchestration**
