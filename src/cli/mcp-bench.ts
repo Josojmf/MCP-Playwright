@@ -27,11 +27,16 @@ interface CliDependencies {
   getRun: (runId: string) => CliRunRecord | undefined;
 }
 
+function createDefaultOrchestrator(provider: Awaited<ReturnType<typeof createProvider>>): CliOrchestrator {
+  const orchestrator = new OrchestratorService(provider);
+  return orchestrator;
+}
+
 const defaultCliDeps: CliDependencies = {
   readFeatureText: (resolvedPath) => readFileSync(resolve(resolvedPath), "utf-8"),
   createProvider,
   parseFeature: (featureText) => new GherkinParserService().parseFeature(featureText),
-  createOrchestrator: (provider) => new OrchestratorService(provider),
+  createOrchestrator: createDefaultOrchestrator,
   now: () => Date.now(),
   log: (message) => console.log(message),
   error: (message) => console.error(message),
@@ -106,7 +111,11 @@ export async function runHeadless(
 
   let provider;
   try {
-    provider = await deps.createProvider(providerConfig);
+    if (deps === defaultCliDeps) {
+      provider = await createProvider(providerConfig);
+    } else {
+      provider = await deps.createProvider(providerConfig);
+    }
   } catch (err) {
     if (err instanceof ProviderConfigError) {
       deps.error(`Provider configuration error: ${err.message}`);
@@ -198,7 +207,11 @@ export async function runHeadless(
     results,
   };
 
-  deps.log(JSON.stringify(output, null, 2));
+  if (deps === defaultCliDeps) {
+    console.log(JSON.stringify(output, null, 2));
+  } else {
+    deps.log(JSON.stringify(output, null, 2));
+  }
 
   const hasFailure = results.some((mcp) =>
     mcp.scenarios.some((scenario) =>
