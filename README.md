@@ -367,7 +367,39 @@ En detalle de run:
 Comandos base de calidad:
 
 - typecheck: validación de tipos
-- test: pruebas unitarias/integración del dominio
+- test: lane rápida y determinista para el trabajo rutinario
+- test:smoke: lane secundaria con seams reales de persistencia y filesystem
+- test:ci: ejecuta `fast` y `smoke` en orden
+
+### Modelo de lanes
+
+La suite ya no depende de un único glob amplio. El repositorio usa un manifiesto explícito en `scripts/test/test-manifest.mjs` y un único entrypoint en `scripts/test/run-lane.mjs`.
+
+Política:
+
+- `npm test`
+  - ejecuta la lane `fast`, pensada para checks rutinarios, deterministas y rápidos
+- `npm run test:fast`
+  - ejecuta explícitamente la misma lane rápida
+- `npm run test:smoke`
+  - ejecuta la lane lenta para seams reales: persistencia SQLite, filesystem de screenshots y API de historial sobre datos persistidos
+- `npm run test:ci`
+  - ejecuta `fast` y después `smoke`, manteniendo visible cuándo falla la cobertura lenta
+- `node scripts/test/run-lane.mjs fast --list`
+  - lista el inventario exacto de la lane rápida sin ejecutar tests
+- `node scripts/test/run-lane.mjs smoke --list`
+  - lista el inventario exacto de la lane smoke sin ejecutar tests
+
+Inventario smoke inicial:
+
+- `src/server/api/history.test.ts`
+- `src/server/storage/sqlite.test.ts`
+- `src/server/storage/screenshots.test.ts`
+
+La regla operativa de Phase 13 es:
+
+- la lane `fast` absorbe tests conductuales, contract tests y evidence tests aislados
+- la lane `smoke` se reserva para un conjunto pequeño de pruebas con I/O real o seams de mayor costo, para proteger la velocidad diaria sin perder validación sobre persistencia real
 
 El repositorio incluye pruebas en módulos críticos:
 

@@ -1,8 +1,19 @@
-export const smokeTestFiles = Object.freeze([
-  "src/server/api/history.test.ts",
-  "src/server/storage/sqlite.test.ts",
-  "src/server/storage/screenshots.test.ts",
+export const smokeInventory = Object.freeze([
+  {
+    file: "src/server/api/history.test.ts",
+    reason: "Fastify injection coverage against persisted run metadata and trust-state output.",
+  },
+  {
+    file: "src/server/storage/sqlite.test.ts",
+    reason: "Real SQLite persistence coverage for runs, steps, and screenshot metadata.",
+  },
+  {
+    file: "src/server/storage/screenshots.test.ts",
+    reason: "Filesystem-backed screenshot storage smoke coverage.",
+  },
 ]);
+
+export const smokeTestFiles = Object.freeze(smokeInventory.map((entry) => entry.file));
 
 export const testManifest = Object.freeze({
   fast: {
@@ -19,7 +30,7 @@ export const testManifest = Object.freeze({
     ownership: {
       policy:
         "Only tests that exercise real persistence, filesystem, process lifecycle, or similarly expensive seams belong here.",
-      files: smokeTestFiles,
+      files: smokeInventory,
     },
   },
 });

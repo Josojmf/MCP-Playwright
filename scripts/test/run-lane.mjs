@@ -63,7 +63,7 @@ function resolveFastLaneFiles() {
 }
 
 function resolveSmokeLaneFiles() {
-  const files = [...testManifest.smoke.ownership.files].sort();
+  const files = testManifest.smoke.ownership.files.map((entry) => entry.file).sort();
   ensureFilesExist(files);
   return files;
 }
