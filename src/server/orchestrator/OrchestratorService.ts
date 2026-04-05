@@ -8,6 +8,12 @@ import { assembleSystemPrompt } from "../../shared/llm/systemPrompt";
 import { BudgetExceededError } from "../../shared/harness/TokenBudget";
 import { runAssertion, AssertionResult } from "../validation/assertionsRunner";
 
+/**
+ * Completion cap per orchestrator call. Tool decisions are small JSON; a high max_tokens
+ * can trigger OpenRouter 402 when remaining credits cover slightly less than requested.
+ */
+const ORCHESTRATOR_LLM_MAX_TOKENS = 512;
+
 const MCP_AGENT_TEMPLATE = `You are a browser automation assistant. You must decide the next single MCP action for the current Gherkin step.
 
 Available tools:
@@ -275,7 +281,7 @@ Scenario: ${scenario.name}`,
     const request: LLMRequest = {
       model: ctx.mcpConfig.provider.model || "gpt-4",
       messages: [...currentMessages, stepMessage],
-      maxTokens: 1000,
+      maxTokens: ORCHESTRATOR_LLM_MAX_TOKENS,
     };
 
     ctx.tokenBudget.checkBudget();
@@ -360,7 +366,7 @@ Scenario: ${scenario.name}`,
             },
             ...stepConversation,
           ],
-          maxTokens: 900,
+          maxTokens: ORCHESTRATOR_LLM_MAX_TOKENS,
           responseFormat: { type: "json_object" },
         }),
         TIMEOUT_TIERS.STEP,
@@ -416,15 +422,22 @@ Scenario: ${scenario.name}`,
         continue;
       }
 
+      const toolCallStartedAt = Date.now();
       const toolResult = await ctx.toolClient!.callTool(toolName, toolArgs);
       const toolSummary = this.summarizeToolResult(toolResult);
+      const captureTimestamp = new Date().toISOString();
 
       toolCalls.push({
         toolId: `${toolName}-${toolCalls.length + 1}`,
         toolName,
         arguments: toolArgs,
+        status: toolResult.type,
+        correlationId: `${toolName}-${toolCalls.length + 1}`,
+        latencyMs: Date.now() - toolCallStartedAt,
+        captureTimestamp,
         result: toolResult.type === "success" ? toolSummary : undefined,
         error: toolResult.type === "error" ? toolSummary : undefined,
+        errorMessage: toolResult.type === "error" ? toolSummary : undefined,
       });
 
       stepConversation.push({
@@ -471,7 +484,14 @@ Scenario: ${scenario.name}`,
               toolId: parsed.tool_id || parsed.function?.name || parsed.action || "unknown",
               toolName: parsed.tool || parsed.function?.name || parsed.action || "unknown",
               arguments: parsed.arguments || parsed.function?.arguments || parsed.params || {},
+              status: parsed.error ? "error" : "success",
+              correlationId: parsed.tool_id || parsed.function?.name || parsed.action || "unknown",
+              latencyMs: 0,
+              captureTimestamp: new Date().toISOString(),
+              screenshotId: parsed.screenshotId,
               result: parsed.result,
+              error: parsed.error,
+              errorMessage: parsed.errorMessage || parsed.error,
             });
           }
         } catch {
@@ -554,6 +574,7 @@ Scenario: ${scenario.name}`,
     return (
       normalized.includes("missing credential") ||
       normalized.includes("request failed (401)") ||
+      normalized.includes("request failed (402)") ||
       normalized.includes("request failed (403)") ||
       normalized.includes("unsupported provider") ||
       normalized.includes("requires azureendpoint") ||

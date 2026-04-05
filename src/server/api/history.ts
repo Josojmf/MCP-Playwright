@@ -54,6 +54,8 @@ export async function registerHistoryRoutes(server: any) {
           metadata: {
             totalTokens: run.totalTokens,
             estimatedCost: run.estimatedCost.toFixed(4),
+            trustState: run.trustState,
+            trustReasons: run.trustReasons,
             failureStats,
             executionTime: calculateExecutionTime(run.startedAt, run.completedAt),
           },
@@ -234,6 +236,11 @@ function buildRunCsv(run: NonNullable<ReturnType<typeof getRun>>): string {
     "inputTokens",
     "outputTokens",
     "totalTokens",
+    "trustState",
+    "provider",
+    "orchestratorModel",
+    "lowCostAuditorModel",
+    "highAccuracyAuditorModel",
   ];
 
   const rows = run.steps.map((step) => [
@@ -247,6 +254,11 @@ function buildRunCsv(run: NonNullable<ReturnType<typeof getRun>>): string {
     step.tokens.input,
     step.tokens.output,
     step.tokens.total,
+    run.trustState,
+    run.provider ?? "",
+    run.orchestratorModel ?? "",
+    run.lowCostAuditorModel ?? "",
+    run.highAccuracyAuditorModel ?? "",
   ]);
 
   return [header, ...rows].map((row) => row.map((value) => csvValue(value)).join(",")).join("\n");
@@ -260,6 +272,12 @@ function buildSummaryCsv(runs: Array<NonNullable<ReturnType<typeof getRun>>>): s
     "hallucinationCount",
     "totalTokens",
     "totalCostUsd",
+    "trustState",
+    "trustReasons",
+    "provider",
+    "orchestratorModel",
+    "lowCostAuditorModel",
+    "highAccuracyAuditorModel",
   ];
 
   const rows: Array<Array<string | number>> = [];
@@ -290,6 +308,12 @@ function buildSummaryCsv(runs: Array<NonNullable<ReturnType<typeof getRun>>>): s
         hallucinationCount,
         totalTokens,
         Number(totalCostUsd.toFixed(4)),
+        run.trustState,
+        run.trustReasons.join("|"),
+        run.provider ?? "",
+        run.orchestratorModel ?? "",
+        run.lowCostAuditorModel ?? "",
+        run.highAccuracyAuditorModel ?? "",
       ]);
     }
   }

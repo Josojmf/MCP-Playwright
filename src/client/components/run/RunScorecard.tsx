@@ -3,16 +3,29 @@ import { AlertTriangle, ChevronDown, ChevronRight, XCircle } from "lucide-react"
 import type { ProgressState, StepEvidence } from "@/App";
 import { getStepFlagStyles } from "./StepFlagStyles";
 
+interface LiveRunMeta {
+  executionConfig: {
+    provider: string;
+    orchestratorModel: string;
+    lowCostAuditorModel: string;
+    highAccuracyAuditorModel: string;
+  } | null;
+  trustState: "AUDITABLE" | "DEGRADED";
+  trustReasons: string[];
+}
+
 interface RunScorecardProps {
   progressByMcp: Record<string, ProgressState>;
   stepEvidenceByMcp: Record<string, StepEvidence[]>;
   lastScreenshotByMcp: Record<string, string | null>;
+  runMetaByMcp: Record<string, LiveRunMeta>;
 }
 
 export function RunScorecard({
   progressByMcp,
   stepEvidenceByMcp,
   lastScreenshotByMcp: _lastScreenshotByMcp,
+  runMetaByMcp,
 }: RunScorecardProps) {
   const [expandedMcps, setExpandedMcps] = useState<Set<string>>(() => new Set());
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(() => new Set());
@@ -43,9 +56,48 @@ export function RunScorecard({
   };
 
   const hasAnySteps = mcpIds.some((mcpId) => (stepEvidenceByMcp[mcpId] ?? []).length > 0);
+  const firstMeta = Object.values(runMetaByMcp)[0] ?? null;
+  const trust = Object.values(runMetaByMcp).some((meta) => meta.trustState === "DEGRADED") ? "DEGRADED" : "AUDITABLE";
+  const trustReasons = [...new Set(Object.values(runMetaByMcp).flatMap((meta) => meta.trustReasons))];
 
   return (
     <div className="flex flex-col gap-4">
+      {firstMeta?.executionConfig ? (
+        <div className="rounded-[6px] border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+            <div className="metric-card metric-card-highlight">
+              <span className="metric-label">Trust</span>
+              <span className="metric-value">{trust}</span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">Provider</span>
+              <span className="metric-value">{firstMeta.executionConfig.provider}</span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">Orchestrator</span>
+              <span className="metric-value">{firstMeta.executionConfig.orchestratorModel}</span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">Low-cost auditor</span>
+              <span className="metric-value">{firstMeta.executionConfig.lowCostAuditorModel}</span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">High-accuracy auditor</span>
+              <span className="metric-value">{firstMeta.executionConfig.highAccuracyAuditorModel}</span>
+            </div>
+          </div>
+          {trustReasons.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {trustReasons.map((reason) => (
+                <span key={reason} className="chip">
+                  {reason}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="overflow-x-auto rounded-[6px] border border-[var(--app-border)] bg-[var(--app-panel)]">
         <div className="border-b border-[var(--app-border)] px-4 py-3">
           <p className="text-[12px] font-semibold tracking-[0.10em] text-[var(--app-muted)]">RESULTADOS DEL RUN</p>

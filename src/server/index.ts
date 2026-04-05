@@ -226,6 +226,8 @@ server.get("/stream/:runId", (request, reply) => {
 
     server.log.info({ runId, subscriberId }, "SSE client disconnected");
   });
+
+  return reply;
 });
 
 const start = async () => {

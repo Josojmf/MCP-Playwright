@@ -24,14 +24,27 @@ import type { ParsedStep, ScenarioPlan } from "../../server/parser";
 
 export const FIXED_TIMESTAMP = "2026-04-04T12:00:00.000Z";
 
-export const loggerStub = {
+export const loggerStub: {
+  info: () => undefined;
+  warn: () => undefined;
+  error: () => undefined;
+  debug: () => undefined;
+  trace: () => undefined;
+  fatal: () => undefined;
+  child: () => typeof loggerStub;
+  level: string;
+  silent: () => undefined;
+} = {
   info: () => undefined,
   warn: () => undefined,
   error: () => undefined,
   debug: () => undefined,
   trace: () => undefined,
   fatal: () => undefined,
-} as const;
+  child: () => loggerStub,
+  level: "info",
+  silent: () => undefined,
+};
 
 type ResponseSeed =
   | string

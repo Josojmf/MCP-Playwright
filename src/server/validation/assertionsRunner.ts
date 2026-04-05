@@ -1,211 +1,277 @@
-import { TranslatedAssertion } from '../parser/translator';
+import { ASSERTION_PATTERNS } from "../parser/assertionPatterns";
+import { TranslatedAssertion } from "../parser/translator";
 
-/**
- * Resultado de ejecutar una assertion
- */
 export interface AssertionResult {
-  status: 'passed' | 'failed';
-  message?: string; // Mensaje de error en español si falla
-  stack?: string; // Stack trace si hay error
+  status: "passed" | "failed";
+  message?: string;
+  stack?: string;
 }
 
-/**
- * Contexto de ejecución para assertions (Playwright page/expect)
- */
+type AssertionExpect = (value: unknown) => {
+  toBeVisible: () => Promise<void> | void;
+  toHaveURL: (url: string) => Promise<void> | void;
+  toHaveTitle: (title: string) => Promise<void> | void;
+  toContainText: (text: string) => Promise<void> | void;
+  toHaveCount: (count: number) => Promise<void> | void;
+  toHaveAttribute: (name: string, value: string) => Promise<void> | void;
+  toHaveValue: (value: string) => Promise<void> | void;
+};
+
+interface AssertionPage {
+  url?: () => string;
+  title?: () => string;
+  getByText?: (text: string) => unknown;
+  locator?: (selector: string) => unknown;
+  getByLabel?: (label: string) => unknown;
+}
+
 export interface AssertionContext {
-  page?: unknown;
-  expect?: unknown;
+  page?: AssertionPage;
+  expect?: AssertionExpect;
   [key: string]: unknown;
 }
 
-/**
- * Setup para contexto de Playwright (inicialización global)
- * Puede ser usado para inicializar Playwright browsers, contextos, etc.
- */
+type AssertionRunner = (assertion: TranslatedAssertion, context: RequiredAssertionContext) => Promise<void>;
+
+interface RequiredAssertionContext {
+  page: AssertionPage;
+  expect: AssertionExpect;
+}
+
 export async function setupPlaywrightContext(): Promise<void> {
-  // Placeholder para inicialización de Playwright si es necesaria
-  // En tests, se usa un mock
+  // Placeholder for future Playwright lifecycle wiring.
 }
 
-/**
- * Cleanup para contexto de Playwright
- */
 export async function cleanupPlaywrightContext(): Promise<void> {
-  // Placeholder para limpieza de Playwright
-  // En tests, se usa un mock
+  // Placeholder for future Playwright lifecycle wiring.
 }
 
-/**
- * Ejecuta una assertion independientemente del resultado reportado por MCP
- *
- * Comportamiento:
- * - Lee step.assertion.playwrightCall (del parser/translator.ts)
- * - Ejecuta en contexto controlado de Playwright expect()
- * - Si pasa: { status: "passed" }
- * - Si falla: { status: "failed", message: string (en español), stack }
- * - Independiente del resultado reportado por MCP (per VALID-02)
- *
- * @param assertion TranslatedAssertion con playwrightCall
- * @param context AssertionContext que contiene page y expect
- * @returns AssertionResult con status y mensaje opcional
- */
+export const ALLOWLISTED_ASSERTION_RUNNERS: Record<string, AssertionRunner> = {
+  "url-match": async (assertion, context) => {
+    const [expectedUrl] = readMatch(assertion, "url-match");
+    await context.expect(context.page).toHaveURL(expectedUrl);
+  },
+  "title-match": async (assertion, context) => {
+    const [expectedTitle] = readMatch(assertion, "title-match");
+    await context.expect(context.page).toHaveTitle(expectedTitle);
+  },
+  "text-visible": async (assertion, context) => {
+    const [text] = readMatch(assertion, "text-visible");
+    await context.expect(readPageMethod(context.page, "getByText")(text)).toBeVisible();
+  },
+  "locator-visible": async (assertion, context) => {
+    const [selector] = readMatch(assertion, "locator-visible");
+    await context.expect(readPageMethod(context.page, "locator")(selector)).toBeVisible();
+  },
+  "locator-contains-text": async (assertion, context) => {
+    const [selector, text] = readMatch(assertion, "locator-contains-text");
+    await context.expect(readPageMethod(context.page, "locator")(selector)).toContainText(text);
+  },
+  "count-elements": async (assertion, context) => {
+    const [count, selector] = readMatch(assertion, "count-elements");
+    await context.expect(readPageMethod(context.page, "locator")(selector)).toHaveCount(Number(count));
+  },
+  "attribute-value": async (assertion, context) => {
+    const [selector, attribute, value] = readMatch(assertion, "attribute-value");
+    await context.expect(readPageMethod(context.page, "locator")(selector)).toHaveAttribute(attribute, value);
+  },
+  "input-value": async (assertion, context) => {
+    const [label, value] = readMatch(assertion, "input-value");
+    await context.expect(readPageMethod(context.page, "getByLabel")(label)).toHaveValue(value);
+  },
+  "redirect-url": async (assertion, context) => {
+    const [expectedUrl] = readMatch(assertion, "redirect-url");
+    await context.expect(context.page).toHaveURL(expectedUrl);
+  },
+  "text-content": async (assertion, context) => {
+    const [text] = readMatch(assertion, "text-content");
+    await context.expect(readPageMethod(context.page, "getByText")(text)).toBeVisible();
+  },
+};
+
 export async function runAssertion(
   assertion: TranslatedAssertion,
   context: AssertionContext
 ): Promise<AssertionResult> {
-  // Validar que tenemos playwrightCall traducido
-  if (!assertion.playwrightCall) {
-    return {
-      status: 'failed',
-      message: `No se pudo traducir la assertion: "${assertion.original}"`,
-    };
+  const patternId = assertion.patternId?.trim() ?? null;
+
+  if (!patternId) {
+    return unsupportedAssertionResult("untranslatable");
+  }
+
+  const runner = ALLOWLISTED_ASSERTION_RUNNERS[patternId];
+  if (!runner) {
+    return unsupportedAssertionResult(patternId);
   }
 
   try {
-    // Ejecutar playwrightCall en contexto controlado
-    // Este es un wrapper que simula el contexto de Playwright expect()
-    const result = await executePlaywrightAssertion(
-      assertion.playwrightCall,
-      context
-    );
+    await runner(assertion, {
+      page: context.page ?? {},
+      expect: context.expect ?? mockExpect,
+    });
 
-    if (result.success) {
-      return {
-        status: 'passed',
-      };
-    } else {
-      return {
-        status: 'failed',
-        message: result.errorMessage,
-        stack: result.stack,
-      };
-    }
+    return { status: "passed" };
   } catch (error) {
-    // Capturar errores de expect() y convertir a mensaje legible en español
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const stack = error instanceof Error ? error.stack : undefined;
-
-    // Traducciones de errores comunes de Playwright al español
-    const spanishMessage = translatePlaywrightError(errorMessage);
-
+    const message = error instanceof Error ? error.message : String(error);
     return {
-      status: 'failed',
-      message: spanishMessage || errorMessage,
-      stack,
-    };
-  }
-}
-
-/**
- * Ejecuta código de assertion de Playwright en contexto controlado
- * @param playwrightCall código generado por translator.ts
- * @param context contexto con page y expect
- * @returns resultado de ejecución
- */
-async function executePlaywrightAssertion(
-  playwrightCall: string,
-  context: AssertionContext
-): Promise<{ success: boolean; errorMessage?: string; stack?: string }> {
-  try {
-    // Crear función que ejecuta el assertion código dentro del contexto
-    // Simulamos: expect(context.page.xxx).toXxx()
-    // Por ahora, retornamos success para pruebas simples
-
-    // En producción, esto usaría require('playwright').expect() real
-    // pero por ahora hacemos un mock que puede ser usado en tests
-
-    // Validación básica: si el contexto tiene lo necesario
-    if (playwrightCall === 'true' || playwrightCall === 'expect(true).toBe(true)') {
-      return { success: true };
-    }
-
-    // Intentar ejecutar con seguridad
-    // Esta es una versión simplificada para evitar RCE
-    // En producción se usaría un sandbox o evaluador seguro
-    try {
-      // eslint-disable-next-line no-eval
-      const fn = new Function('expect', 'page', `return (${playwrightCall})`);
-      const result = fn(context.expect || mockExpect, context.page);
-
-      // Si retorna una promesa, esperarla
-      if (result && typeof result.then === 'function') {
-        await result;
-      }
-
-      return { success: true };
-    } catch (evalError) {
-      const msg = evalError instanceof Error ? evalError.message : String(evalError);
-      return {
-        success: false,
-        errorMessage: msg,
-        stack: evalError instanceof Error ? evalError.stack : undefined,
-      };
-    }
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    return {
-      success: false,
-      errorMessage: msg,
+      status: "failed",
+      message: translatePlaywrightError(message) ?? message,
       stack: error instanceof Error ? error.stack : undefined,
     };
   }
 }
 
-/**
- * Mock de expect para testing
- * Retorna un objeto con métodos toBeVisible, toHaveURL, etc.
- */
+function unsupportedAssertionResult(patternId: string): AssertionResult {
+  return {
+    status: "failed",
+    message: `Unsupported translated assertion pattern: ${patternId}`,
+  };
+}
+
+function readMatch(assertion: TranslatedAssertion, patternId: string): string[] {
+  const pattern = ASSERTION_PATTERNS.find((candidate) => candidate.id === patternId);
+  if (!pattern) {
+    throw new Error(`Assertion pattern metadata missing for ${patternId}`);
+  }
+
+  const match = pattern.regex.exec(assertion.original.trim());
+  if (!match) {
+    throw new Error(`Translated assertion no longer matches pattern ${patternId}`);
+  }
+
+  return match.slice(1);
+}
+
+function readPageMethod<T extends keyof AssertionPage>(
+  page: AssertionPage,
+  key: T
+): Exclude<AssertionPage[T], undefined> {
+  const method = page[key];
+  if (typeof method !== "function") {
+    throw new Error(`Playwright page is missing method ${String(key)}`);
+  }
+
+  return method as Exclude<AssertionPage[T], undefined>;
+}
+
 function mockExpect(value: unknown) {
   return {
-    toBeVisible: () => Promise.resolve(true),
-    toHaveURL: (url: string) => {
-      if (value === url) return Promise.resolve(true);
-      throw new Error(`Locator has no URL match: ${value}`);
+    toBeVisible: async () => {
+      if (readFlag(value, "visible", true)) {
+        return;
+      }
+      throw new Error("Locator has no element that matches the specified criteria");
     },
-    toHaveTitle: (title: string) => {
-      if (value === title) return Promise.resolve(true);
-      throw new Error(`Page title does not match: ${value}`);
+    toHaveURL: async (expectedUrl: string) => {
+      const currentUrl =
+        typeof (value as AssertionPage)?.url === "function"
+          ? (value as AssertionPage).url?.()
+          : readString(value, "url");
+
+      if (currentUrl === expectedUrl) {
+        return;
+      }
+
+      throw new Error(`Locator has no URL match: ${currentUrl ?? "unknown"}`);
     },
-    toContainText: (text: string) => {
-      if (String(value).includes(text)) return Promise.resolve(true);
+    toHaveTitle: async (expectedTitle: string) => {
+      const currentTitle =
+        typeof (value as AssertionPage)?.title === "function"
+          ? (value as AssertionPage).title?.()
+          : readString(value, "title");
+
+      if (currentTitle === expectedTitle) {
+        return;
+      }
+
+      throw new Error(`Page title does not match: ${currentTitle ?? "unknown"}`);
+    },
+    toContainText: async (text: string) => {
+      const actual = readString(value, "text") ?? String(value ?? "");
+      if (actual.includes(text)) {
+        return;
+      }
+
       throw new Error(`Locator does not contain text: ${text}`);
     },
-    toHaveCount: (count: number) => {
-      if (Array.isArray(value) && value.length === count) return Promise.resolve(true);
-      throw new Error(`Count mismatch`);
+    toHaveCount: async (count: number) => {
+      if (readNumber(value, "count") === count) {
+        return;
+      }
+
+      throw new Error("Count mismatch");
     },
-    toHaveAttribute: (_attr: string, _val: string) => {
-      return Promise.resolve(true);
+    toHaveAttribute: async (name: string, expectedValue: string) => {
+      const attributes = readRecord(value, "attributes");
+      if (attributes?.[name] === expectedValue) {
+        return;
+      }
+
+      throw new Error(`Attribute ${name} does not match: ${attributes?.[name] ?? "missing"}`);
     },
-    toHaveValue: (val: string) => {
-      if (value === val) return Promise.resolve(true);
-      throw new Error(`Value does not match: expected ${val}, got ${value}`);
-    },
-    toBe: (val: unknown) => {
-      if (value === val) return Promise.resolve(true);
-      throw new Error(`Value mismatch: expected ${val}, got ${value}`);
+    toHaveValue: async (expectedValue: string) => {
+      const actual = readString(value, "value");
+      if (actual === expectedValue) {
+        return;
+      }
+
+      throw new Error(`Value does not match: expected ${expectedValue}, got ${actual ?? "unknown"}`);
     },
   };
 }
 
-/**
- * Traduce errores de Playwright a mensajes amigables en español
- * @param errorMessage mensaje de error original
- * @returns mensaje traducido o undefined si no hay traducción
- */
+function readFlag(value: unknown, key: string, fallback: boolean): boolean {
+  if (!value || typeof value !== "object" || !(key in value)) {
+    return fallback;
+  }
+
+  return Boolean((value as Record<string, unknown>)[key]);
+}
+
+function readString(value: unknown, key: string): string | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const candidate = (value as Record<string, unknown>)[key];
+  return typeof candidate === "string" ? candidate : undefined;
+}
+
+function readNumber(value: unknown, key: string): number | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const candidate = (value as Record<string, unknown>)[key];
+  return typeof candidate === "number" ? candidate : undefined;
+}
+
+function readRecord(value: unknown, key: string): Record<string, string> | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const candidate = (value as Record<string, unknown>)[key];
+  if (!candidate || typeof candidate !== "object") {
+    return undefined;
+  }
+
+  return candidate as Record<string, string>;
+}
+
 function translatePlaywrightError(errorMessage: string): string | undefined {
   const translations: Record<string, string> = {
-    'Locator has no element that matches the specified criteria':
-      'El elemento no coincide con los criterios especificados',
-    'Timeout 30000ms exceeded': 'Tiempo de espera agotado (30 segundos)',
-    'Target page, context or browser has been closed':
-      'La página o navegador fue cerrado',
-    'net::ERR_FAILED': 'Error de conexión de red',
+    "Locator has no element that matches the specified criteria":
+      "El elemento no coincide con los criterios especificados",
+    "Timeout 30000ms exceeded": "Tiempo de espera agotado (30 segundos)",
+    "Target page, context or browser has been closed":
+      "La página o navegador fue cerrado",
+    "net::ERR_FAILED": "Error de conexión de red",
   };
 
-  for (const [key, value] of Object.entries(translations)) {
-    if (errorMessage.includes(key)) {
-      return value;
+  for (const [pattern, translation] of Object.entries(translations)) {
+    if (errorMessage.includes(pattern)) {
+      return translation;
     }
   }
 

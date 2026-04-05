@@ -24,6 +24,7 @@ import { McpColumnGrid } from "@/components/run/McpColumnGrid";
 import { RunScorecard } from "@/components/run/RunScorecard";
 
 type ThemeMode = "dark" | "light";
+type RunProvider = "openai" | "claude" | "azure" | "openrouter";
 export type RunState = "idle" | "estimating" | "awaiting_confirmation" | "running" | "completed" | "aborted" | "error";
 type LogTone = "info" | "success" | "warning" | "error";
 
@@ -32,6 +33,8 @@ interface McpOption {
   label: string;
   engine: string;
   mode: string;
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 type SidebarSection = "new_run" | "run_history" | "settings";
@@ -52,6 +55,19 @@ interface RunStartResponse {
   runId: string;
   streamPath: string;
   estimate: RunEstimate;
+}
+
+interface RunExecutionConfig {
+  provider: RunProvider;
+  orchestratorModel: string;
+  lowCostAuditorModel: string;
+  highAccuracyAuditorModel: string;
+}
+
+interface LiveRunMeta {
+  executionConfig: RunExecutionConfig | null;
+  trustState: "AUDITABLE" | "DEGRADED";
+  trustReasons: string[];
 }
 
 export interface ProgressState {
@@ -100,18 +116,22 @@ const MCP_METADATA: Record<string, Pick<McpOption, "engine" | "mode">> = {
 const MCP_OPTIONS: McpOption[] = MCP_OPTION_ORDER.map((id) => {
   const item = MCP_REGISTRY[id];
   const metadata = MCP_METADATA[id] ?? { engine: "Unknown", mode: "Unknown" };
+  const isStub = item?.transportMode !== 'stdio' || !item?.spawnCommand || item.spawnCommand.length === 0;
 
   return {
     id,
     label: item?.label ?? id,
     engine: metadata.engine,
     mode: metadata.mode,
+    disabled: isStub,
+    disabledReason: isStub ? "Not available yet (Phase 4)" : undefined,
   };
 });
 
 const DEFAULT_FEATURE = `Feature: Checkout Smoke\n  Background:\n    Given I open "https://example.com"\n\n  Scenario Outline: validate target\n    When I navigate to "<url>"\n    Then I should see the URL "<url>"\n\n    Examples:\n      | url                 |\n      | https://example.com |`;
 
 const STORAGE_KEY = "mcp-bench:run-config";
+const PROVIDER_OPTIONS: RunProvider[] = ["openai", "claude", "azure", "openrouter"];
 
 function App() {
   const [persisted] = useState<PersistedConfig>(() => loadPersistedConfig());
@@ -121,11 +141,21 @@ function App() {
   const [baseUrl, setBaseUrl] = useState(persisted.baseUrl ?? "https://example.com");
   const [featureText, setFeatureText] = useState(persisted.featureText ?? DEFAULT_FEATURE);
   const [tokenCap, setTokenCap] = useState<number>(persisted.tokenCap ?? 12000);
-  const [selectedMcpIds, setSelectedMcpIds] = useState<string[]>(
-    persisted.selectedMcpIds && persisted.selectedMcpIds.length > 0
-      ? persisted.selectedMcpIds
-      : MCP_OPTIONS.map((item) => item.id)
+  const [provider, setProvider] = useState<RunProvider>(persisted.provider ?? "openai");
+  const [orchestratorModel, setOrchestratorModel] = useState(persisted.orchestratorModel ?? "gpt-4o-mini");
+  const [lowCostAuditorModel, setLowCostAuditorModel] = useState(persisted.lowCostAuditorModel ?? "gpt-4.1-mini");
+  const [highAccuracyAuditorModel, setHighAccuracyAuditorModel] = useState(
+    persisted.highAccuracyAuditorModel ?? "gpt-4.1"
   );
+  const [selectedMcpIds, setSelectedMcpIds] = useState<string[]>(() => {
+    const enabledIds = MCP_OPTIONS.filter((item) => !item.disabled).map((item) => item.id);
+    if (persisted.selectedMcpIds && persisted.selectedMcpIds.length > 0) {
+      // Filter out any previously-persisted IDs that are now disabled
+      const valid = persisted.selectedMcpIds.filter((id) => enabledIds.includes(id));
+      return valid.length > 0 ? valid : enabledIds;
+    }
+    return enabledIds;
+  });
 
   const [estimate, setEstimate] = useState<RunEstimate | null>(null);
   const [isEstimateModalOpen, setIsEstimateModalOpen] = useState(false);
@@ -137,6 +167,7 @@ function App() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [lastScreenshotByMcp, setLastScreenshotByMcp] = useState<Record<string, string | null>>({});
   const [stepEvidenceByMcp, setStepEvidenceByMcp] = useState<Record<string, StepEvidence[]>>({});
+  const [runMetaByMcp, setRunMetaByMcp] = useState<Record<string, LiveRunMeta>>({});
   const [historyRuns, setHistoryRuns] = useState<PersistedRun[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -156,10 +187,24 @@ function App() {
         baseUrl,
         featureText,
         tokenCap,
+        provider,
+        orchestratorModel,
+        lowCostAuditorModel,
+        highAccuracyAuditorModel,
         selectedMcpIds,
       })
     );
-  }, [theme, baseUrl, featureText, tokenCap, selectedMcpIds]);
+  }, [
+    theme,
+    baseUrl,
+    featureText,
+    tokenCap,
+    provider,
+    orchestratorModel,
+    lowCostAuditorModel,
+    highAccuracyAuditorModel,
+    selectedMcpIds,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -202,6 +247,10 @@ function App() {
   }, [progressByMcp]);
 
   const runLabel = runStateLabel(runState);
+  const activeRunMeta = Object.values(runMetaByMcp)[0] ?? null;
+  const aggregateTrustState =
+    Object.values(runMetaByMcp).some((meta) => meta.trustState === "DEGRADED") ? "DEGRADED" : "AUDITABLE";
+  const aggregateTrustReasons = [...new Set(Object.values(runMetaByMcp).flatMap((meta) => meta.trustReasons))];
 
   const appendLog = (tone: LogTone, text: string) => {
     setLogs((previous) => {
@@ -312,6 +361,10 @@ function App() {
     featureText: featureText.trim(),
     selectedMcpIds,
     tokenCap,
+    provider,
+    orchestratorModel: orchestratorModel.trim(),
+    lowCostAuditorModel: lowCostAuditorModel.trim(),
+    highAccuracyAuditorModel: highAccuracyAuditorModel.trim(),
   };
 
   const estimateRun = async () => {
@@ -360,6 +413,7 @@ function App() {
     setProgressByMcp({});
     setLastScreenshotByMcp({});
     setStepEvidenceByMcp({});
+    setRunMetaByMcp({});
 
     try {
       const response = await fetch("/api/runs/start", {
@@ -402,10 +456,12 @@ function App() {
     source.addEventListener("run_started", (event) => {
       const data = parseData(event);
       const totalSteps = getNumeric(data.stepCount);
+      const executionConfig = parseExecutionConfig(data.executionConfig);
 
       const nextProgress: Record<string, ProgressState> = {};
       const nextScreenshots: Record<string, string | null> = {};
       const nextEvidence: Record<string, StepEvidence[]> = {};
+      const nextRunMeta: Record<string, LiveRunMeta> = {};
       for (const mcpId of selectedMcpIds) {
         nextProgress[mcpId] = {
           status: "running",
@@ -417,12 +473,24 @@ function App() {
         };
         nextScreenshots[mcpId] = null;
         nextEvidence[mcpId] = [];
+        nextRunMeta[mcpId] = {
+          executionConfig,
+          trustState: "AUDITABLE",
+          trustReasons: [],
+        };
       }
 
       setProgressByMcp(nextProgress);
       setLastScreenshotByMcp(nextScreenshots);
       setStepEvidenceByMcp(nextEvidence);
+      setRunMetaByMcp(nextRunMeta);
       appendLog("info", `Run en ejecución: ${getNumeric(data.totalExecutions)} ejecuciones planeadas.`);
+      if (executionConfig) {
+        appendLog(
+          "info",
+          `Config: ${executionConfig.provider} · ${executionConfig.orchestratorModel} · low-cost ${executionConfig.lowCostAuditorModel} · high-accuracy ${executionConfig.highAccuracyAuditorModel}`
+        );
+      }
     });
 
     source.addEventListener("mcp_ready", (event) => {
@@ -464,6 +532,8 @@ function App() {
       const needsReview = getBoolean(data.needsReview);
       const screenshotId = getString(data.screenshotId);
       const videoUrl = getString(data.videoUrl);
+      const trustState = getString(data.trustState);
+      const trustReasons = getStringArray(data.trustReasons);
 
       setProgressByMcp((previous) => {
         const current = previous[mcpId];
@@ -488,6 +558,16 @@ function App() {
       );
       if (screenshotId) {
         setLastScreenshotByMcp((previous) => ({ ...previous, [mcpId]: screenshotId }));
+      }
+      if (trustState) {
+        setRunMetaByMcp((previous) => ({
+          ...previous,
+          [mcpId]: {
+            executionConfig: previous[mcpId]?.executionConfig ?? null,
+            trustState: trustState === "degraded" ? "DEGRADED" : "AUDITABLE",
+            trustReasons,
+          },
+        }));
       }
       appendStepEvidence(mcpId, {
         id: `${mcpId}-${Date.now()}-${Math.random()}`,
@@ -519,6 +599,8 @@ function App() {
       const videoUrl = getString(data.videoUrl);
       const hallucinated = getBoolean(data.hallucinated);
       const needsReview = getBoolean(data.needsReview);
+      const trustState = getString(data.trustState);
+      const trustReasons = getStringArray(data.trustReasons);
 
       setProgressByMcp((previous) => {
         const current = previous[mcpId];
@@ -538,12 +620,26 @@ function App() {
         };
       });
 
+      const failDetail =
+        getString(data.message).trim() ||
+        getString(data.error).trim() ||
+        "(sin mensaje del servidor)";
       appendLog(
         "error",
-        `[${mcpId}] paso fallido en ${latencyMs}ms${networkOverheadMs > 0 ? ` (+${networkOverheadMs}ms red)` : ""}`
+        `[${mcpId}] paso fallido en ${latencyMs}ms${networkOverheadMs > 0 ? ` (+${networkOverheadMs}ms red)` : ""}: ${failDetail}`
       );
       if (screenshotId) {
         setLastScreenshotByMcp((previous) => ({ ...previous, [mcpId]: screenshotId }));
+      }
+      if (trustState) {
+        setRunMetaByMcp((previous) => ({
+          ...previous,
+          [mcpId]: {
+            executionConfig: previous[mcpId]?.executionConfig ?? null,
+            trustState: trustState === "degraded" ? "DEGRADED" : "AUDITABLE",
+            trustReasons,
+          },
+        }));
       }
       appendStepEvidence(mcpId, {
         id: `${mcpId}-${Date.now()}-${Math.random()}`,
@@ -756,6 +852,54 @@ function App() {
                           className="field-input font-mono"
                         />
                       </label>
+
+                      <label className="field">
+                        <span className="field-label">Provider</span>
+                        <select
+                          value={provider}
+                          onChange={(event) => setProvider(event.target.value as RunProvider)}
+                          className="field-input"
+                        >
+                          {PROVIDER_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="field">
+                        <span className="field-label">Modelo orquestador</span>
+                        <input
+                          type="text"
+                          value={orchestratorModel}
+                          onChange={(event) => setOrchestratorModel(event.target.value)}
+                          className="field-input font-mono"
+                          placeholder="gpt-4o-mini"
+                        />
+                      </label>
+
+                      <label className="field">
+                        <span className="field-label">Auditor low-cost</span>
+                        <input
+                          type="text"
+                          value={lowCostAuditorModel}
+                          onChange={(event) => setLowCostAuditorModel(event.target.value)}
+                          className="field-input font-mono"
+                          placeholder="gpt-4.1-mini"
+                        />
+                      </label>
+
+                      <label className="field lg:col-span-2">
+                        <span className="field-label">Auditor high-accuracy</span>
+                        <input
+                          type="text"
+                          value={highAccuracyAuditorModel}
+                          onChange={(event) => setHighAccuracyAuditorModel(event.target.value)}
+                          className="field-input font-mono"
+                          placeholder="gpt-4.1"
+                        />
+                      </label>
                     </div>
                   </article>
 
@@ -811,15 +955,20 @@ function App() {
                         return (
                           <label
                             key={item.id}
-                            className={`mcp-option ${isSelected ? "mcp-option-selected" : ""}`}
+                            className={`mcp-option ${isSelected ? "mcp-option-selected" : ""} ${item.disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                            title={item.disabledReason ?? undefined}
                           >
                             <Checkbox
                               checked={isSelected}
-                              onCheckedChange={() => toggleMcp(item.id)}
+                              onCheckedChange={() => !item.disabled && toggleMcp(item.id)}
                               className="mcp-checkbox"
+                              disabled={item.disabled}
                             />
                             <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-[var(--app-fg-strong)]">{item.label}</p>
+                              <p className="truncate text-sm font-medium text-[var(--app-fg-strong)]">
+                                {item.label}
+                                {item.disabled && <span className="ml-2 text-[10px] text-[var(--app-muted)]">(coming soon)</span>}
+                              </p>
                               <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-[var(--app-muted)]">
                                 {item.engine} · {item.mode}
                               </p>
@@ -901,6 +1050,41 @@ function App() {
                 runState === "running" ? (
                   <section className="panel panel-animated p-4 sm:p-5">
                     <h2 className="section-title mb-3">EJECUCIÓN EN VIVO</h2>
+                    {activeRunMeta?.executionConfig ? (
+                      <div className="mb-4 rounded-[6px] border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+                          <div className="metric-card metric-card-highlight">
+                            <span className="metric-label">Trust</span>
+                            <span className="metric-value">{aggregateTrustState}</span>
+                          </div>
+                          <div className="metric-card">
+                            <span className="metric-label">Provider</span>
+                            <span className="metric-value">{activeRunMeta.executionConfig.provider}</span>
+                          </div>
+                          <div className="metric-card">
+                            <span className="metric-label">Orchestrator</span>
+                            <span className="metric-value">{activeRunMeta.executionConfig.orchestratorModel}</span>
+                          </div>
+                          <div className="metric-card">
+                            <span className="metric-label">Low-cost auditor</span>
+                            <span className="metric-value">{activeRunMeta.executionConfig.lowCostAuditorModel}</span>
+                          </div>
+                          <div className="metric-card">
+                            <span className="metric-label">High-accuracy auditor</span>
+                            <span className="metric-value">{activeRunMeta.executionConfig.highAccuracyAuditorModel}</span>
+                          </div>
+                        </div>
+                        {aggregateTrustReasons.length > 0 ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {aggregateTrustReasons.map((reason) => (
+                              <span key={reason} className="chip">
+                                {reason}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <McpColumnGrid
                       progressByMcp={progressByMcp}
                       stepEvidenceByMcp={stepEvidenceByMcp}
@@ -918,6 +1102,7 @@ function App() {
                       progressByMcp={progressByMcp}
                       stepEvidenceByMcp={stepEvidenceByMcp}
                       lastScreenshotByMcp={lastScreenshotByMcp}
+                      runMetaByMcp={runMetaByMcp}
                     />
                   </section>
                 ) : null
@@ -1052,6 +1237,10 @@ interface PersistedConfig {
   baseUrl?: string;
   featureText?: string;
   tokenCap?: number;
+  provider?: RunProvider;
+  orchestratorModel?: string;
+  lowCostAuditorModel?: string;
+  highAccuracyAuditorModel?: string;
   selectedMcpIds?: string[];
 }
 
@@ -1090,6 +1279,34 @@ function parseData(event: Event): Record<string, unknown> {
   }
 }
 
+function parseExecutionConfig(value: unknown): RunExecutionConfig | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const provider = getString(record.provider) as RunProvider;
+  const orchestratorModel = getString(record.orchestratorModel);
+  const lowCostAuditorModel = getString(record.lowCostAuditorModel);
+  const highAccuracyAuditorModel = getString(record.highAccuracyAuditorModel);
+
+  if (
+    !PROVIDER_OPTIONS.includes(provider) ||
+    !orchestratorModel ||
+    !lowCostAuditorModel ||
+    !highAccuracyAuditorModel
+  ) {
+    return null;
+  }
+
+  return {
+    provider,
+    orchestratorModel,
+    lowCostAuditorModel,
+    highAccuracyAuditorModel,
+  };
+}
+
 function getString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
@@ -1100,6 +1317,14 @@ function getNumeric(value: unknown): number {
 
 function getBoolean(value: unknown): boolean {
   return value === true;
+}
+
+function getStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
 function getErrorMessage(error: unknown): string {

@@ -85,6 +85,40 @@ export function RunDetailView({ run, isLoading, error }: RunDetailViewProps) {
         </div>
       </div>
 
+      <div className="mt-4 rounded border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+          <div className="metric-card metric-card-highlight">
+            <span className="metric-label">Trust</span>
+            <span className="metric-value">{run.trustState === "degraded" ? "DEGRADED" : "AUDITABLE"}</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Provider</span>
+            <span className="metric-value">{run.provider ?? "-"}</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Orchestrator</span>
+            <span className="metric-value">{run.orchestratorModel ?? "-"}</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Low-cost auditor</span>
+            <span className="metric-value">{run.lowCostAuditorModel ?? "-"}</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">High-accuracy auditor</span>
+            <span className="metric-value">{run.highAccuracyAuditorModel ?? "-"}</span>
+          </div>
+        </div>
+        {run.trustReasons.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {run.trustReasons.map((reason) => (
+              <span key={reason} className="chip">
+                {reason}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
       <div className="mt-4 space-y-2">
         {run.steps.map((step) => (
           <article
@@ -120,6 +154,39 @@ export function RunDetailView({ run, isLoading, error }: RunDetailViewProps) {
                 {step.validation.hallucinated ? (
                   <span className="rounded border border-[color-mix(in_srgb,var(--app-danger)_35%,transparent)] bg-[color-mix(in_srgb,var(--app-danger)_16%,transparent)] px-2 py-1 text-[var(--app-danger)]">HALLUCINATED</span>
                 ) : null}
+              </div>
+            ) : null}
+            {step.toolCalls && step.toolCalls.length > 0 ? (
+              <div className="mt-3 rounded border border-[var(--app-border)] bg-[var(--app-panel-strong)] p-3 text-[11px] text-[var(--app-muted)]">
+                <p className="mb-2 font-semibold text-[var(--app-fg-strong)]">Tool traces</p>
+                <div className="flex flex-col gap-2">
+                  {step.toolCalls.map((toolCall) => (
+                    <div key={toolCall.toolId} className="rounded border border-[var(--app-border)] bg-[var(--app-panel)] p-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="chip">{toolCall.toolName}</span>
+                        <span className={getStepStatusBadge(toolCall.status === "error" ? "failed" : "passed")}>
+                          {toolCall.status}
+                        </span>
+                        <span>{toolCall.latencyMs}ms</span>
+                      </div>
+                      <p className="mt-1">Correlation ID: {toolCall.correlationId}</p>
+                      {toolCall.result ? <p className="mt-1">Result: {toolCall.result}</p> : null}
+                      {toolCall.error || toolCall.errorMessage ? (
+                        <p className="mt-1">Error: {toolCall.errorMessage ?? toolCall.error}</p>
+                      ) : null}
+                      {toolCall.screenshotId ? (
+                        <a
+                          href={`/api/screenshots/${encodeURIComponent(toolCall.screenshotId)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-2 inline-flex text-xs font-medium text-[var(--app-accent)] underline decoration-[color-mix(in_srgb,var(--app-accent)_50%,transparent)] underline-offset-2"
+                        >
+                          Screenshot {toolCall.screenshotId}
+                        </a>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : null}
             {screenshotsByStep.get(step.id) ? (

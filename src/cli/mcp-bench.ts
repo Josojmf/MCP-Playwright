@@ -40,8 +40,8 @@ const defaultCliDeps: CliDependencies = {
   now: () => Date.now(),
   log: (message) => console.log(message),
   error: (message) => console.error(message),
-  getLatestRunId,
-  getRun,
+  getLatestRunId: () => getLatestRunId() ?? undefined,
+  getRun: (runId) => getRun(runId) ?? undefined,
 };
 
 async function main() {

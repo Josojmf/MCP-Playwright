@@ -15,8 +15,14 @@ export interface ToolCallTrace {
   toolId: string;
   toolName: string;
   arguments: Record<string, unknown>;
+  status: "success" | "error";
+  correlationId: string;
+  latencyMs: number;
+  captureTimestamp: string;
+  screenshotId?: string;
   result?: string;
   error?: string;
+  errorMessage?: string;
 }
 
 /**

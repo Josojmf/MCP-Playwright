@@ -6,7 +6,7 @@ import { BudgetExceededError, TokenBudget } from "../shared/harness/TokenBudget"
 import { LoopDetector, LoopError } from "../shared/harness/LoopDetector";
 import { TimeoutError } from "../shared/harness/withTimeout";
 import { OrchestratorService } from "./orchestrator/OrchestratorService";
-import type { RunContext, MCPConfig, StepResult } from "./orchestrator/types";
+import type { RunContext, MCPConfig, StepResult, ToolCallTrace } from "./orchestrator/types";
 import { saveRun, saveScreenshot as saveRunScreenshot } from "./storage/sqlite";
 import { MCP_REGISTRY } from "../shared/registry";
 import { McpProcessManager } from "./mcp/McpProcessManager";
@@ -18,21 +18,34 @@ import { isStaleRefError, traceStaleRefRecovery } from "./mcp/stalenessRecovery"
 import { resolvePricing, estimateCostUsd } from "../shared/pricing/resolver";
 import { createProvider } from "../shared/llm/factory";
 
+type ProviderType = "openai" | "claude" | "azure" | "openrouter";
+
 export interface RunEstimateRequest {
   baseUrl: string;
   featureText: string;
   selectedMcpIds: string[];
   tokenCap: number;
-  provider?: string;   // e.g. "openai", "claude", "azure", "openrouter"
-  model?: string;     // optional; "default" used as fallback
-  lowCostAuditorModel?: string;      // default "gpt-4.1-mini"
-  highAccuracyAuditorModel?: string;  // default "gpt-4.1"
+  provider?: string;
+  orchestratorModel?: string;
+  lowCostAuditorModel?: string;
+  highAccuracyAuditorModel?: string;
 }
 
 interface NormalizedRunEstimateRequest extends RunEstimateRequest {
-  provider: string;
-  model: string;
+  provider: ProviderType;
+  orchestratorModel: string;
+  lowCostAuditorModel: string;
+  highAccuracyAuditorModel: string;
 }
+
+export interface RunExecutionConfig {
+  provider: ProviderType;
+  orchestratorModel: string;
+  lowCostAuditorModel: string;
+  highAccuracyAuditorModel: string;
+}
+
+type TrustState = "auditable" | "degraded";
 
 export interface RunEstimate {
   scenarioCount: number;
@@ -56,10 +69,10 @@ interface RunConfig {
   baseUrl: string;
   selectedMcpIds: string[];
   tokenCap: number;
-  orchestratorModel?: string;
-  lowCostAuditorModel?: string;      // default "gpt-4.1-mini"
-  highAccuracyAuditorModel?: string;  // default "gpt-4.1"
-  providerType?: "openai" | "claude" | "azure" | "openrouter"; // LLM provider for orchestrator
+  provider: ProviderType;
+  orchestratorModel: string;
+  lowCostAuditorModel: string;
+  highAccuracyAuditorModel: string;
 }
 
 type RunStatus = "pending" | "running" | "completed" | "aborted";
@@ -140,10 +153,10 @@ export class PhaseOneRunManager {
     const estimatedOutputTokens = this.estimateOutputTokens(stepCount, selectedMcpCount);
     const estimatedTotalTokens = estimatedInputTokens + estimatedOutputTokens;
 
-    const pricing = resolvePricing(normalizedInput.provider, normalizedInput.model);
+    const pricing = resolvePricing(normalizedInput.provider, normalizedInput.orchestratorModel);
     if (!pricing) {
       throw new Error(
-        `Unknown pricing for provider "${normalizedInput.provider}" model "${normalizedInput.model}". ` +
+        `Unknown pricing for provider "${normalizedInput.provider}" model "${normalizedInput.orchestratorModel}". ` +
         `Check PRICING_TABLE in src/shared/pricing/table.ts.`
       );
     }
@@ -166,6 +179,27 @@ export class PhaseOneRunManager {
 
   public createRun(input: RunEstimateRequest): RunStartResponse {
     const normalizedInput = this.normalizeInput(input);
+
+    // Filter out MCPs that don't have a spawnCommand (e.g. HTTP-only stubs)
+    const unsupported = normalizedInput.selectedMcpIds.filter((id) => {
+      const entry = MCP_REGISTRY[id];
+      return !entry?.spawnCommand || entry.spawnCommand.length === 0;
+    });
+    if (unsupported.length > 0) {
+      normalizedInput.selectedMcpIds = normalizedInput.selectedMcpIds.filter(
+        (id) => !unsupported.includes(id)
+      );
+      this.logger.warn(
+        { unsupported },
+        "Filtered out MCP targets without spawnCommand"
+      );
+    }
+    if (normalizedInput.selectedMcpIds.length === 0) {
+      throw new RequestValidationError(
+        "No quedan MCP targets válidos después de filtrar los no soportados."
+      );
+    }
+
     const estimate = this.estimateRun(normalizedInput);
 
     if (!estimate.withinBudget) {
@@ -174,14 +208,10 @@ export class PhaseOneRunManager {
       );
     }
 
-    // Extract orchestrator model (the actual LLM model for running the scenario)
-    const orchestratorModel = normalizedInput.model || "default";
+    const orchestratorModel = normalizedInput.orchestratorModel;
+    const lowCostAuditorModel = normalizedInput.lowCostAuditorModel;
+    const highAccuracyAuditorModel = normalizedInput.highAccuracyAuditorModel;
 
-    // Extract two-tier auditor models (for vision validation), with defaults
-    const lowCostAuditorModel = normalizedInput.lowCostAuditorModel || "gpt-4.1-mini";
-    const highAccuracyAuditorModel = normalizedInput.highAccuracyAuditorModel || "gpt-4.1";
-
-    // Guard: neither auditor tier model can equal the orchestrator model
     if (lowCostAuditorModel === orchestratorModel) {
       throw new RequestValidationError(
         `Low-cost auditor model and orchestrator model must differ: both are '${orchestratorModel}'.`
@@ -193,28 +223,6 @@ export class PhaseOneRunManager {
       );
     }
 
-    // Detect provider type from environment variables
-    const valueFromEnv = (...keys: string[]): string | undefined => {
-      for (const key of keys) {
-        const value = process.env[key];
-        if (value && value.trim()) {
-          return value.trim();
-        }
-      }
-      return undefined;
-    };
-
-    let providerType: "openai" | "claude" | "azure" | "openrouter" = "openai"; // default
-    if (valueFromEnv("OPENAI_API_KEY")) {
-      providerType = "openai";
-    } else if (valueFromEnv("ANTHROPIC_API_KEY")) {
-      providerType = "claude";
-    } else if (valueFromEnv("AZURE_OPENAI_API_KEY")) {
-      providerType = "azure";
-    } else if (valueFromEnv("OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY")) {
-      providerType = "openrouter";
-    }
-
     const runId = randomUUID();
     const plan = this.parseFeatureOrThrow(normalizedInput.featureText);
 
@@ -224,10 +232,10 @@ export class PhaseOneRunManager {
         baseUrl: normalizedInput.baseUrl,
         selectedMcpIds: normalizedInput.selectedMcpIds,
         tokenCap: normalizedInput.tokenCap,
+        provider: normalizedInput.provider,
         orchestratorModel,
         lowCostAuditorModel,
         highAccuracyAuditorModel,
-        providerType,
       },
       plan,
       estimate,
@@ -337,6 +345,12 @@ export class PhaseOneRunManager {
       stepCount: session.estimate.stepCount,
       mcpCount: session.estimate.selectedMcpCount,
       totalExecutions: session.estimate.totalExecutions,
+      executionConfig: {
+        provider: session.config.provider,
+        orchestratorModel: session.config.orchestratorModel,
+        lowCostAuditorModel: session.config.lowCostAuditorModel,
+        highAccuracyAuditorModel: session.config.highAccuracyAuditorModel,
+      } satisfies RunExecutionConfig,
     });
 
     const budget = new TokenBudget(
@@ -353,7 +367,15 @@ export class PhaseOneRunManager {
       const executions = session.config.selectedMcpIds.map((mcpId) =>
         this.executeMcpRun(session, mcpId, budget)
       );
-      await Promise.allSettled(executions);
+      const results = await Promise.allSettled(executions);
+
+      for (let i = 0; i < results.length; i++) {
+        const res = results[i];
+        if (res.status === "rejected") {
+          const mcpId = session.config.selectedMcpIds[i];
+          this.logger.error({ runId: session.id, mcpId, err: res.reason }, "MCP execution failed to start or threw unhandled error");
+        }
+      }
 
       if (session.abortController.signal.aborted) {
         session.status = "aborted";
@@ -398,15 +420,27 @@ export class PhaseOneRunManager {
   }
 
   private async executeMcpRun(session: RunSession, mcpId: string, budget: TokenBudget): Promise<void> {
-    const loopDetector = new LoopDetector(3, 20);
-    const orchestrator = new OrchestratorService();
-    const processManager = new McpProcessManager(mcpId);
-    const providerConfig = this.resolveProviderConfig();
-
-    // Real MCP client via McpProcessManager (Phase 8)
-    const instrumentedClient = new InstrumentedMcpClient(processManager);
+    let processManager: McpProcessManager | null = null;
+    let instrumentedClient: InstrumentedMcpClient | null = null;
 
     try {
+      // Validate that the MCP has a spawnCommand before attempting to create a process
+      const registryEntry = MCP_REGISTRY[mcpId];
+      if (!registryEntry?.spawnCommand || registryEntry.spawnCommand.length === 0) {
+        throw new Error(
+          `MCP "${mcpId}" no tiene spawnCommand configurado (transport: ${registryEntry?.transportMode ?? 'unknown'}). ` +
+          `Solo los MCP con transporte stdio están soportados actualmente.`
+        );
+      }
+
+      const loopDetector = new LoopDetector(3, 20);
+      const orchestrator = new OrchestratorService();
+      processManager = new McpProcessManager(mcpId);
+      const providerConfig = this.resolveProviderConfig(session.config);
+
+      // Real MCP client via McpProcessManager (Phase 8)
+      instrumentedClient = new InstrumentedMcpClient(processManager);
+
       this.emit(session, "mcp_ready", {
         runId: session.id,
         mcpId,
@@ -453,7 +487,7 @@ export class PhaseOneRunManager {
           conversationHistory: [],
           tokenBudget: budget,
           abortSignal: session.abortController.signal,
-          toolClient: processManager,
+          toolClient: instrumentedClient,
           availableTools: processManager.getTools(),
         };
 
@@ -474,7 +508,14 @@ export class PhaseOneRunManager {
                     status: 'aborted' as const,
                     message: `[LOOP] ${loopErr.message}`,
                   };
-                  await this.trackStepResult(session, mcpId, abortedResult, scenario.steps.length, mcpConfig.provider.model ?? 'gpt-4');
+                  await this.trackStepResult(
+                    session,
+                    mcpId,
+                    abortedResult,
+                    scenario.steps.length,
+                    instrumentedClient.consumeTraces(),
+                    instrumentedClient
+                  );
                   throw loopErr; // Re-throw to abort the run
                 }
                 throw loopErr;
@@ -498,23 +539,30 @@ export class PhaseOneRunManager {
                 ...stepResult,
                 message: `[STALE-REF] ${stepResult.message} (no contabilizado como fallo de benchmark)`,
               };
-              await this.trackStepResult(session, mcpId, recoveredResult, scenario.steps.length, mcpConfig.provider.model ?? "gpt-4");
-
-              // Collect instrumented traces for this step
-              const instrumentedTraces = instrumentedClient.getTraces();
-              this.logger.info({ mcpId, tracesCount: instrumentedTraces.length }, "InstrumentedMcpClient wired");
+              await this.trackStepResult(
+                session,
+                mcpId,
+                recoveredResult,
+                scenario.steps.length,
+                instrumentedClient.consumeTraces(),
+                instrumentedClient
+              );
               continue;
             }
           }
 
-          await this.trackStepResult(session, mcpId, stepResult, scenario.steps.length, mcpConfig.provider.model ?? "gpt-4");
-
-          // Collect instrumented traces for this step (connects InstrumentedMcpClient pipeline)
-          const instrumentedTraces = instrumentedClient.getTraces();
-          this.logger.info({ mcpId, tracesCount: instrumentedTraces.length }, "InstrumentedMcpClient wired");
+          await this.trackStepResult(
+            session,
+            mcpId,
+            stepResult,
+            scenario.steps.length,
+            instrumentedClient.consumeTraces(),
+            instrumentedClient
+          );
         }
       }
     } catch (error) {
+      console.error("🔥 ERROR EN executeMcpRun:", error);
       const errorMessage = this.errorMessage(error);
 
       // EXEC-05: Trace stale-ref at run level (if the error propagated uncaught)
@@ -530,8 +578,8 @@ export class PhaseOneRunManager {
       });
       this.logger.warn({ runId: session.id, mcpId, err: error }, "MCP run aborted");
     } finally {
-      instrumentedClient.clearTraces();
-      await processManager.dispose();
+      if (instrumentedClient) instrumentedClient.clearTraces();
+      if (processManager) await processManager.dispose();
     }
   }
 
@@ -540,16 +588,17 @@ export class PhaseOneRunManager {
     mcpId: string,
     stepResult: StepResult,
     stepCountInScenario: number,
-    _orchestratorModel: string
+    instrumentedTraces: ToolCallTrace[],
+    instrumentedClient: InstrumentedMcpClient
   ): Promise<void> {
     const isCloud = MCP_REGISTRY[mcpId]?.transportMode === "http";
     const networkOverheadMs = isCloud ? Math.max(30, Math.round(stepResult.latencyMs * 0.25)) : 0;
     const persistedRunId = this.buildPersistedRunId(session.id, mcpId);
-
     const { screenshotId, screenshotPath } = await this.captureStepScreenshot(
       persistedRunId,
       stepResult.stepId,
-      stepResult.stepText
+      instrumentedTraces,
+      instrumentedClient
     );
 
     const normalizedStepStatus: "passed" | "failed" | "aborted" =
@@ -562,10 +611,9 @@ export class PhaseOneRunManager {
       // D-05/D-06: Only validate PASSED steps via vision LLM; failed/aborted get deterministic result
       if (normalizedStepStatus === "passed" && screenshotPath) {
         // Build auditorProvider from config using low-cost model for initial construction
-        const providerType = session.config.providerType ?? "openai";
         const auditorProvider = await createProvider({
-          provider: providerType,
-          model: session.config.lowCostAuditorModel ?? "gpt-4.1-mini",
+          provider: session.config.provider,
+          model: session.config.lowCostAuditorModel,
         });
 
         // Read screenshot buffer
@@ -583,7 +631,7 @@ export class PhaseOneRunManager {
           provider: auditorProvider,
           stepStatus: normalizedStepStatus,
           stepText: stepResult.stepText,
-          orchestratorModel: session.config.orchestratorModel ?? "gpt-4o",
+          orchestratorModel: session.config.orchestratorModel,
           lowCostAuditorModel: session.config.lowCostAuditorModel,
           highAccuracyAuditorModel: session.config.highAccuracyAuditorModel,
         });
@@ -592,7 +640,7 @@ export class PhaseOneRunManager {
         // Passed steps without screenshot get uncertain verdict
         if (normalizedStepStatus !== "passed") {
           validation = {
-            auditorModel: session.config.lowCostAuditorModel ?? "gpt-4.1-mini",
+            auditorModel: session.config.lowCostAuditorModel,
             tier: "low",
             verdict: "contradicts",
             confidence: 0.95,
@@ -603,7 +651,7 @@ export class PhaseOneRunManager {
         } else {
           // Passed step but no screenshot
           validation = {
-            auditorModel: session.config.lowCostAuditorModel ?? "gpt-4.1-mini",
+            auditorModel: session.config.lowCostAuditorModel,
             tier: "low",
             verdict: "uncertain",
             confidence: 0.2,
@@ -617,7 +665,7 @@ export class PhaseOneRunManager {
       // Fallback if validation throws - don't let validator errors break the run
       this.logger.warn({ err, stepId: stepResult.stepId }, "Async validator error - using fallback");
       validation = {
-        auditorModel: session.config.lowCostAuditorModel ?? "gpt-4.1-mini",
+        auditorModel: session.config.lowCostAuditorModel,
         tier: "low",
         verdict: "uncertain",
         confidence: 0.2,
@@ -631,6 +679,9 @@ export class PhaseOneRunManager {
     if (mcpValidation) {
       mcpValidation.set(stepResult.stepId, validation);
     }
+
+    const trustReasons = this.deriveStepTrustReasons(stepResult, validation, screenshotId, instrumentedTraces);
+    const trustState: TrustState = trustReasons.length > 0 ? "degraded" : "auditable";
 
     const mcpPendingScreenshots = session.pendingScreenshotsByMcp.get(mcpId);
     if (mcpPendingScreenshots && screenshotId && screenshotPath) {
@@ -646,9 +697,11 @@ export class PhaseOneRunManager {
       mcpResults.push({
         ...stepResult,
         mcpId,
+        toolCalls: instrumentedTraces.length > 0 ? instrumentedTraces : stepResult.toolCalls,
         validation,
         networkOverheadMs,
-      } as StepResult & { validation: StepValidation; networkOverheadMs: number });
+        trustReasons,
+      } as StepResult & { validation: StepValidation; networkOverheadMs: number; trustReasons: string[] });
     }
 
     this.emit(session, "step_started", {
@@ -691,6 +744,8 @@ export class PhaseOneRunManager {
       validation,
       hallucinated: validation.hallucinated,
       needsReview: validation.needsReview,
+      trustState,
+      trustReasons,
     };
 
     if (stepResult.status === "failed") {
@@ -708,7 +763,9 @@ export class PhaseOneRunManager {
     const scenarioName = session.plan[0]?.name ?? "Run";
 
     for (const mcpId of session.config.selectedMcpIds) {
-      const mcpSteps = session.resultsByMcp.get(mcpId) ?? [];
+      const mcpSteps = session.resultsByMcp.get(mcpId) as Array<
+        StepResult & { validation?: StepValidation | null; networkOverheadMs?: number; trustReasons?: string[] }
+      > ?? [];
       if (mcpSteps.length === 0) {
         continue;
       }
@@ -720,7 +777,16 @@ export class PhaseOneRunManager {
         : "passed";
 
       const persistedRunId = this.buildPersistedRunId(session.id, mcpId);
-      saveRun(persistedRunId, `${scenarioName} [${mcpId}]`, session.plan.length, mcpSteps, status);
+      const trustReasons = [...new Set(mcpSteps.flatMap((step) => step.trustReasons ?? []))];
+      const trustState: TrustState = trustReasons.length > 0 ? "degraded" : "auditable";
+      saveRun(persistedRunId, `${scenarioName} [${mcpId}]`, session.plan.length, mcpSteps, status, {
+        trustState,
+        trustReasons,
+        provider: session.config.provider,
+        orchestratorModel: session.config.orchestratorModel,
+        lowCostAuditorModel: session.config.lowCostAuditorModel,
+        highAccuracyAuditorModel: session.config.highAccuracyAuditorModel,
+      });
       session.persistedByMcp.set(mcpId, persistedRunId);
 
       const mcpScreenshots = session.pendingScreenshotsByMcp.get(mcpId) ?? [];
@@ -749,11 +815,27 @@ export class PhaseOneRunManager {
   private async captureStepScreenshot(
     runId: string,
     stepId: string,
-    stepText: string
+    traces: ToolCallTrace[],
+    instrumentedClient: InstrumentedMcpClient
   ): Promise<{ screenshotId: string | null; screenshotPath: string | null }> {
     try {
-      const screenshotBuffer = this.getPlaceholderScreenshot(stepText);
-      const screenshotId = await saveFileScreenshot(screenshotBuffer, runId, stepId, SCREENSHOT_DIR);
+      const traceWithScreenshot = traces.find((trace) => trace.screenshotId);
+      if (!traceWithScreenshot?.screenshotId) {
+        return { screenshotId: null, screenshotPath: null };
+      }
+
+      const screenshotBuffer = instrumentedClient.getScreenshot(traceWithScreenshot.screenshotId);
+      if (!screenshotBuffer) {
+        return { screenshotId: null, screenshotPath: null };
+      }
+
+      const screenshotId = await saveFileScreenshot(
+        screenshotBuffer,
+        runId,
+        stepId,
+        SCREENSHOT_DIR,
+        traceWithScreenshot.toolId
+      );
       const screenshotPath = resolveScreenshotImagePath(runId, stepId, screenshotId, SCREENSHOT_DIR);
       return { screenshotId, screenshotPath };
     } catch (error) {
@@ -762,13 +844,31 @@ export class PhaseOneRunManager {
     }
   }
 
-  private getPlaceholderScreenshot(stepText: string): Buffer {
-    void stepText;
-    // 1x1 transparent PNG
-    return Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5M2V8AAAAASUVORK5CYII=",
-      "base64"
-    );
+  private deriveStepTrustReasons(
+    stepResult: StepResult,
+    validation: StepValidation,
+    screenshotId: string | null,
+    traces: ToolCallTrace[]
+  ): string[] {
+    const reasons = new Set<string>();
+
+    if (traces.length === 0) {
+      reasons.add("missing_tool_trace");
+    }
+
+    if (!screenshotId) {
+      reasons.add("missing_step_screenshot");
+    }
+
+    if (validation.needsReview || validation.verdict === "uncertain") {
+      reasons.add("review_only_validation");
+    }
+
+    if (stepResult.message.includes("Unsupported translated assertion pattern")) {
+      reasons.add("unsupported_translated_assertion");
+    }
+
+    return [...reasons];
   }
 
   private validateInput(input: RunEstimateRequest): void {
@@ -800,7 +900,9 @@ export class PhaseOneRunManager {
     const featureText = this.normalizeFeatureText(input.featureText ?? "");
     const selectedMcpIds = this.normalizeSelectedMcpIds(input.selectedMcpIds ?? []);
     const provider = this.normalizeProvider(input.provider);
-    const model = this.normalizeModel(input.model);
+    const orchestratorModel = this.normalizeOrchestratorModel(provider, input.orchestratorModel);
+    const lowCostAuditorModel = this.normalizeNamedModel(input.lowCostAuditorModel, "gpt-4.1-mini");
+    const highAccuracyAuditorModel = this.normalizeNamedModel(input.highAccuracyAuditorModel, "gpt-4.1");
 
     return {
       ...input,
@@ -808,29 +910,66 @@ export class PhaseOneRunManager {
       featureText,
       selectedMcpIds,
       provider,
-      model,
+      orchestratorModel,
+      lowCostAuditorModel,
+      highAccuracyAuditorModel,
     };
   }
 
-  private normalizeProvider(provider: string | undefined): string {
+  private normalizeProvider(provider: string | undefined): ProviderType {
     const normalized = provider?.trim().toLowerCase();
-    if (normalized) {
+    if (!normalized) {
+      return this.detectDefaultProviderFromEnv();
+    }
+
+    if (normalized === "openai" || normalized === "claude" || normalized === "azure" || normalized === "openrouter") {
       return normalized;
     }
 
-    return this.detectDefaultProviderFromEnv();
+    throw new RequestValidationError(`Provider no soportado: ${provider}`);
   }
 
-  private normalizeModel(model: string | undefined): string {
+  private normalizeOrchestratorModel(provider: ProviderType, model: string | undefined): string {
     const normalized = model?.trim();
     if (normalized) {
       return normalized;
     }
 
-    return "default";
+    const valueFromEnv = (...keys: string[]): string | undefined => {
+      for (const key of keys) {
+        const value = process.env[key];
+        if (value && value.trim()) {
+          return value.trim();
+        }
+      }
+      return undefined;
+    };
+
+    if (provider === "openai") {
+      return valueFromEnv("OPENAI_MODEL") ?? "gpt-4o-mini";
+    }
+
+    if (provider === "claude") {
+      return valueFromEnv("ANTHROPIC_MODEL") ?? "claude-3-5-sonnet-latest";
+    }
+
+    if (provider === "azure") {
+      return valueFromEnv("AZURE_OPENAI_MODEL", "AZURE_OPENAI_DEPLOYMENT") ?? "gpt-4o";
+    }
+
+    return valueFromEnv("OPENROUTER_MODEL", "OPEN_ROUTER_MODEL") ?? "openai/gpt-4o-mini";
   }
 
-  private detectDefaultProviderFromEnv(): "openai" | "claude" | "azure" | "openrouter" {
+  private normalizeNamedModel(model: string | undefined, fallback: string): string {
+    const normalized = model?.trim();
+    if (normalized) {
+      return normalized;
+    }
+
+    return fallback;
+  }
+
+  private detectDefaultProviderFromEnv(): ProviderType {
     const valueFromEnv = (...keys: string[]): string | undefined => {
       for (const key of keys) {
         const value = process.env[key];
@@ -894,7 +1033,7 @@ export class PhaseOneRunManager {
     return null;
   }
 
-  private resolveProviderConfig(): MCPConfig["provider"] {
+  private resolveProviderConfig(config: RunConfig): MCPConfig["provider"] {
     const valueFromEnv = (...keys: string[]): string | undefined => {
       for (const key of keys) {
         const value = process.env[key];
@@ -905,46 +1044,71 @@ export class PhaseOneRunManager {
       return undefined;
     };
 
-    const openAiKey = valueFromEnv("OPENAI_API_KEY");
-    if (openAiKey) {
+    // Auto-detect provider based on available credentials as fallback
+    let activeProvider = process.env.DEFAULT_PROVIDER || config.provider;
+    
+    if (activeProvider === "openai" && !valueFromEnv("OPENAI_API_KEY")) {
+      if (valueFromEnv("OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY")) activeProvider = "openrouter";
+      else if (valueFromEnv("ANTHROPIC_API_KEY")) activeProvider = "claude";
+      else if (valueFromEnv("AZURE_OPENAI_API_KEY") && valueFromEnv("AZURE_OPENAI_ENDPOINT")) activeProvider = "azure";
+    }
+
+    if (activeProvider === "openai") {
+      const openAiKey = valueFromEnv("OPENAI_API_KEY");
+      if (!openAiKey) {
+        throw new RequestValidationError("Falta OPENAI_API_KEY para ejecutar con provider openai.");
+      }
+
       return {
         provider: "openai",
-        model: valueFromEnv("OPENAI_MODEL") ?? "gpt-4o-mini",
+        model: config.orchestratorModel,
       };
     }
 
-    const openRouterKey = valueFromEnv("OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY");
-    if (openRouterKey) {
+    if (activeProvider === "openrouter") {
+      const openRouterKey = valueFromEnv("OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY");
+      if (!openRouterKey) {
+        throw new RequestValidationError("Falta OPENROUTER_API_KEY para ejecutar con provider openrouter.");
+      }
+
       return {
         provider: "openrouter",
-        model: valueFromEnv("OPENROUTER_MODEL", "OPEN_ROUTER_MODEL") ?? "openai/gpt-4o-mini",
+        model: config.orchestratorModel,
       };
     }
 
-    const claudeKey = valueFromEnv("ANTHROPIC_API_KEY");
-    if (claudeKey) {
+    if (activeProvider === "claude") {
+      const claudeKey = valueFromEnv("ANTHROPIC_API_KEY");
+      if (!claudeKey) {
+        throw new RequestValidationError("Falta ANTHROPIC_API_KEY para ejecutar con provider claude.");
+      }
+
       return {
         provider: "claude",
-        model: valueFromEnv("ANTHROPIC_MODEL") ?? "claude-3-5-sonnet-latest",
+        model: config.orchestratorModel,
       };
     }
 
-    const azureKey = valueFromEnv("AZURE_OPENAI_API_KEY");
-    const azureEndpoint = valueFromEnv("AZURE_OPENAI_ENDPOINT");
-    const azureDeployment = valueFromEnv("AZURE_OPENAI_DEPLOYMENT");
-    if (azureKey && azureEndpoint && azureDeployment) {
+    if (activeProvider === "azure") {
+      const azureKey = valueFromEnv("AZURE_OPENAI_API_KEY");
+      const azureEndpoint = valueFromEnv("AZURE_OPENAI_ENDPOINT");
+      const azureDeployment = valueFromEnv("AZURE_OPENAI_DEPLOYMENT") ?? config.orchestratorModel;
+      if (!azureKey || !azureEndpoint) {
+        throw new RequestValidationError(
+          "Faltan credenciales Azure OpenAI. Define AZURE_OPENAI_API_KEY y AZURE_OPENAI_ENDPOINT."
+        );
+      }
+
       return {
         provider: "azure",
-        model: valueFromEnv("AZURE_OPENAI_MODEL") ?? azureDeployment,
+        model: config.orchestratorModel,
         azureEndpoint,
         azureDeploymentName: azureDeployment,
         azureApiVersion: valueFromEnv("AZURE_OPENAI_API_VERSION"),
       };
     }
 
-    throw new RequestValidationError(
-      "Faltan credenciales LLM. Define OPENAI_API_KEY o OPENROUTER_API_KEY (también soporta ANTHROPIC_API_KEY/Azure OpenAI)."
-    );
+    throw new RequestValidationError(`Provider no soportado: ${activeProvider}`);
   }
 
   private normalizeBaseUrl(baseUrl: string): string {

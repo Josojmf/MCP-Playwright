@@ -20,8 +20,22 @@ export interface PersistedStep {
   tokens: StepTokens;
   latencyMs: number;
   networkOverheadMs: number;
-  toolCalls?: unknown[];
+  toolCalls?: ToolCallTrace[];
   validation?: StepValidation | null;
+}
+
+export interface ToolCallTrace {
+  toolId: string;
+  toolName: string;
+  arguments: Record<string, unknown>;
+  status: "success" | "error";
+  correlationId: string;
+  latencyMs: number;
+  captureTimestamp: string;
+  screenshotId?: string;
+  result?: string;
+  error?: string;
+  errorMessage?: string;
 }
 
 export interface StepValidation {
@@ -56,6 +70,12 @@ export interface PersistedRun {
   totalCostUsd?: number;
   hallucinationCount?: number;
   needsReviewCount?: number;
+  trustState: "auditable" | "degraded";
+  trustReasons: string[];
+  provider: string | null;
+  orchestratorModel: string | null;
+  lowCostAuditorModel: string | null;
+  highAccuracyAuditorModel: string | null;
 }
 
 export interface RunDetail extends PersistedRun {

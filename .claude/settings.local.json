@@ -14,7 +14,10 @@
       "Bash(ls .planning/phases/09-real-vision-llm-validation/*-VALIDATION.md)",
       "Bash(ls C:/INFORMATICA/MCP-Playwright/.planning/phases/09-real-vision-llm-validation/*VALIDATION* C:/INFORMATICA/MCP-Playwright/.planning/phases/09-real-vision-llm-validation/*VERIFICATION* C:/INFORMATICA/MCP-Playwright/.planning/phases/09-real-vision-llm-validation/*AUDIT*)",
       "Bash(sed:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Skill(gsd:progress)",
+      "Skill(gsd:add-phase)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

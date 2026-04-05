@@ -1,4 +1,3 @@
-import assert from "node:assert/strict";
 import test from "node:test";
 import { assertNormalizedFragments, loadSourceContract } from "../test/support/sourceContracts";
 

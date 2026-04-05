@@ -7,6 +7,7 @@ import { StepValidation } from "../validation/visionValidator";
 const DATA_DIR = join(process.cwd(), ".data");
 
 export type PersistedRunStatus = "passed" | "failed" | "aborted";
+export type PersistedTrustState = "auditable" | "degraded";
 
 export interface PersistedRun {
   id: string;
@@ -21,6 +22,12 @@ export interface PersistedRun {
   totalCostUsd: number;
   hallucinationCount: number;
   needsReviewCount: number;
+  trustState: PersistedTrustState;
+  trustReasons: string[];
+  provider: string | null;
+  orchestratorModel: string | null;
+  lowCostAuditorModel: string | null;
+  highAccuracyAuditorModel: string | null;
 }
 
 export interface PersistedStep {
@@ -62,6 +69,12 @@ export interface SaveRunOptions {
   startedAt?: string;
   completedAt?: string;
   totalCostUsd?: number;
+  trustState?: PersistedTrustState;
+  trustReasons?: string[];
+  provider?: string;
+  orchestratorModel?: string;
+  lowCostAuditorModel?: string;
+  highAccuracyAuditorModel?: string;
 }
 
 export type PersistableStep = StepResult & {
@@ -98,7 +111,13 @@ function initializeDb(): Database {
       totalTokens INTEGER NOT NULL DEFAULT 0,
       totalCostUsd REAL NOT NULL DEFAULT 0,
       hallucinationCount INTEGER NOT NULL DEFAULT 0,
-      needsReviewCount INTEGER NOT NULL DEFAULT 0
+      needsReviewCount INTEGER NOT NULL DEFAULT 0,
+      trustState TEXT NOT NULL DEFAULT 'auditable',
+      trustReasons TEXT NOT NULL DEFAULT '[]',
+      provider TEXT,
+      orchestratorModel TEXT,
+      lowCostAuditorModel TEXT,
+      highAccuracyAuditorModel TEXT
     );
 
     CREATE TABLE IF NOT EXISTS steps (
@@ -137,6 +156,12 @@ function initializeDb(): Database {
   ensureColumn(db, "runs", "totalCostUsd", "ALTER TABLE runs ADD COLUMN totalCostUsd REAL NOT NULL DEFAULT 0");
   ensureColumn(db, "runs", "hallucinationCount", "ALTER TABLE runs ADD COLUMN hallucinationCount INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "runs", "needsReviewCount", "ALTER TABLE runs ADD COLUMN needsReviewCount INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "runs", "trustState", "ALTER TABLE runs ADD COLUMN trustState TEXT NOT NULL DEFAULT 'auditable'");
+  ensureColumn(db, "runs", "trustReasons", "ALTER TABLE runs ADD COLUMN trustReasons TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "runs", "provider", "ALTER TABLE runs ADD COLUMN provider TEXT");
+  ensureColumn(db, "runs", "orchestratorModel", "ALTER TABLE runs ADD COLUMN orchestratorModel TEXT");
+  ensureColumn(db, "runs", "lowCostAuditorModel", "ALTER TABLE runs ADD COLUMN lowCostAuditorModel TEXT");
+  ensureColumn(db, "runs", "highAccuracyAuditorModel", "ALTER TABLE runs ADD COLUMN highAccuracyAuditorModel TEXT");
 
   ensureColumn(db, "steps", "mcpId", "ALTER TABLE steps ADD COLUMN mcpId TEXT NOT NULL DEFAULT 'unknown'");
   ensureColumn(db, "steps", "networkOverheadMs", "ALTER TABLE steps ADD COLUMN networkOverheadMs INTEGER NOT NULL DEFAULT 0");
@@ -184,13 +209,16 @@ export function saveRun(
     Number((totalTokens * 0.000005).toFixed(6));
   const hallucinationCount = steps.filter((s) => s.validation?.hallucinated).length;
   const needsReviewCount = steps.filter((s) => s.validation?.needsReview).length;
+  const trustState = options.trustState ?? "auditable";
+  const trustReasons = options.trustReasons ?? [];
 
   const insertRun = db.prepare(`
     INSERT OR REPLACE INTO runs (
       id, name, scenarioCount, totalSteps, startedAt, completedAt, status, summary,
-      totalTokens, totalCostUsd, hallucinationCount, needsReviewCount
+      totalTokens, totalCostUsd, hallucinationCount, needsReviewCount,
+      trustState, trustReasons, provider, orchestratorModel, lowCostAuditorModel, highAccuracyAuditorModel
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const deleteSteps = db.prepare("DELETE FROM steps WHERE runId = ?");
@@ -215,7 +243,13 @@ export function saveRun(
       totalTokens,
       totalCostUsd,
       hallucinationCount,
-      needsReviewCount
+      needsReviewCount,
+      trustState,
+      JSON.stringify(trustReasons),
+      options.provider ?? null,
+      options.orchestratorModel ?? null,
+      options.lowCostAuditorModel ?? null,
+      options.highAccuracyAuditorModel ?? null
     );
 
     deleteSteps.run(runId);
@@ -396,6 +430,12 @@ function toPersistedRun(row: Record<string, unknown>): PersistedRun {
     totalCostUsd: Number(row.totalCostUsd ?? 0),
     hallucinationCount: Number(row.hallucinationCount ?? 0),
     needsReviewCount: Number(row.needsReviewCount ?? 0),
+    trustState: String(row.trustState ?? "auditable") as PersistedTrustState,
+    trustReasons: safeJsonParse(String(row.trustReasons ?? "[]"), []),
+    provider: row.provider ? String(row.provider) : null,
+    orchestratorModel: row.orchestratorModel ? String(row.orchestratorModel) : null,
+    lowCostAuditorModel: row.lowCostAuditorModel ? String(row.lowCostAuditorModel) : null,
+    highAccuracyAuditorModel: row.highAccuracyAuditorModel ? String(row.highAccuracyAuditorModel) : null,
   };
 }
 
