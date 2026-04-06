@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { CheckCircle2, LoaderCircle, XCircle } from "lucide-react";
 import type { RunDetail } from "@/types/history";
 import { EmptyState } from "@/components/common/EmptyState";
 import { FileCode2 } from "lucide-react";
+import { ScreenshotLightbox } from "../run/ScreenshotLightbox";
 
 interface RunDetailViewProps {
   run: RunDetail | null;
@@ -42,6 +44,10 @@ export function RunDetailView({ run, isLoading, error }: RunDetailViewProps) {
       </section>
     );
   }
+
+  const [lightbox, setLightbox] = useState<{ open: boolean; title: string; url: string }>({
+    open: false, title: "", url: "",
+  });
 
   const passed = run.steps.filter((step) => step.status === "passed").length;
   const failed = run.steps.filter((step) => step.status === "failed").length;
@@ -190,14 +196,37 @@ export function RunDetailView({ run, isLoading, error }: RunDetailViewProps) {
               </div>
             ) : null}
             {screenshotsByStep.get(step.id) ? (
-              <a
-                href={`/api/screenshots/${encodeURIComponent(String(screenshotsByStep.get(step.id)?.id ?? ""))}`}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-2 inline-flex text-xs font-medium text-[var(--app-accent)] underline decoration-[color-mix(in_srgb,var(--app-accent)_50%,transparent)] underline-offset-2"
+              <button
+                type="button"
+                onClick={() => {
+                  const ssId = screenshotsByStep.get(step.id)?.id ?? "";
+                  setLightbox({
+                    open: true,
+                    title: `Paso ${step.index + 1} · ${step.text}`,
+                    url: `/api/screenshots/${encodeURIComponent(ssId)}`,
+                  });
+                }}
+                aria-label={`Ver screenshot del paso ${step.index + 1}`}
+                style={{
+                  width: "120px",
+                  height: "68px",
+                  border: "1px solid var(--app-border)",
+                  borderRadius: "4px",
+                  overflow: "hidden",
+                  cursor: "pointer",
+                  padding: 0,
+                  background: "none",
+                  display: "block",
+                  marginTop: "8px",
+                }}
               >
-                Ver screenshot
-              </a>
+                <img
+                  src={`/api/screenshots/${encodeURIComponent(String(screenshotsByStep.get(step.id)?.id ?? ""))}`}
+                  alt={`Screenshot paso ${step.index + 1}`}
+                  loading="lazy"
+                  style={{ objectFit: "cover", width: "100%", height: "100%" }}
+                />
+              </button>
             ) : null}
           </article>
         ))}
@@ -221,6 +250,13 @@ export function RunDetailView({ run, isLoading, error }: RunDetailViewProps) {
       <p className="mt-3 text-xs text-[var(--app-muted)]">
         Pasados: {passed} · Fallidos: {failed}
       </p>
+
+      <ScreenshotLightbox
+        open={lightbox.open}
+        onOpenChange={(open) => setLightbox((prev) => ({ ...prev, open }))}
+        title={lightbox.title}
+        screenshotUrl={lightbox.url}
+      />
     </section>
   );
 }

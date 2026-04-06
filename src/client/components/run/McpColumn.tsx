@@ -212,6 +212,43 @@ export function McpColumn({ mcpId, progress, steps, lastScreenshotId, onScreensh
                 <p style={{ fontSize: "13px", fontFamily: "ui-monospace, 'Cascadia Code', 'Fira Code', monospace", color: "var(--app-muted)", marginTop: "2px" }}>
                   {step.tokensUsed} tok · {step.latencyMs}ms
                 </p>
+                {step.screenshotId && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onScreenshotClick(
+                        `${mcpId} · ${step.stepText}`,
+                        `/api/screenshots/${encodeURIComponent(step.screenshotId!)}`
+                      );
+                    }}
+                    aria-label={`Ver screenshot de ${step.stepText}`}
+                    style={{
+                      width: "120px",
+                      height: "68px",
+                      border: "1px solid var(--app-border)",
+                      borderRadius: "4px",
+                      overflow: "hidden",
+                      cursor: "pointer",
+                      padding: 0,
+                      background: "none",
+                      flexShrink: 0,
+                      marginTop: "4px",
+                      display: "block",
+                    }}
+                  >
+                    <img
+                      src={`/api/screenshots/${encodeURIComponent(step.screenshotId!)}`}
+                      alt={`Screenshot · ${step.stepText}`}
+                      loading="lazy"
+                      style={{
+                        objectFit: "cover",
+                        width: "100%",
+                        height: "100%",
+                      }}
+                    />
+                  </button>
+                )}
               </div>
             </div>
           );
