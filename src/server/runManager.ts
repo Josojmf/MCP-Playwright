@@ -697,6 +697,7 @@ export class PhaseOneRunManager {
       mcpResults.push({
         ...stepResult,
         mcpId,
+        screenshotId: screenshotId ?? undefined,
         toolCalls: instrumentedTraces.length > 0 ? instrumentedTraces : stepResult.toolCalls,
         validation,
         networkOverheadMs,
@@ -714,6 +715,27 @@ export class PhaseOneRunManager {
       canonicalType: stepResult.canonicalType,
       stepText: stepResult.stepText,
     });
+
+    // TRACE-07 / D-07: Emit individual tool call events for real-time streaming
+    const allTraces = instrumentedTraces.length > 0 ? instrumentedTraces : stepResult.toolCalls;
+    for (let i = 0; i < allTraces.length; i++) {
+      const trace = allTraces[i];
+      this.emit(session, "tool_call_completed", {
+        runId: session.id,
+        mcpId,
+        stepId: stepResult.stepId,
+        stepIndex: stepResult.stepIndex,
+        toolCallIndex: i,
+        toolName: trace.toolName,
+        arguments: trace.arguments,
+        status: trace.status,
+        latencyMs: trace.latencyMs,
+        result: trace.result,
+        error: trace.error,
+        screenshotId: trace.screenshotId,
+        timestamp: trace.captureTimestamp,
+      });
+    }
 
     if (stepResult.status === "aborted") {
       this.emit(session, "mcp_aborted", {
@@ -819,12 +841,35 @@ export class PhaseOneRunManager {
     instrumentedClient: InstrumentedMcpClient
   ): Promise<{ screenshotId: string | null; screenshotPath: string | null }> {
     try {
+      // 1. Check existing trace screenshots
       const traceWithScreenshot = traces.find((trace) => trace.screenshotId);
-      if (!traceWithScreenshot?.screenshotId) {
-        return { screenshotId: null, screenshotPath: null };
+      let screenshotBuffer: Buffer | undefined;
+
+      if (traceWithScreenshot?.screenshotId) {
+        screenshotBuffer = instrumentedClient.getScreenshot(traceWithScreenshot.screenshotId);
       }
 
-      const screenshotBuffer = instrumentedClient.getScreenshot(traceWithScreenshot.screenshotId);
+      // 2. If no trace screenshot, attempt a fresh capture via MCP tool (TRACE-01, D-01)
+      if (!screenshotBuffer) {
+        try {
+          const result = await instrumentedClient.callTool("browser_take_screenshot", {});
+          if (result && result.type === "success") {
+            // Extract base64 image from result content
+            const imgContent = result.content?.find(
+              (c: { type: string; text?: string }) => c.type === "image" || (c.type === "text" && c.text)
+            );
+            if (imgContent) {
+              const base64Data = (imgContent as { type: string; text?: string; data?: string }).data ?? imgContent.text;
+              if (base64Data && typeof base64Data === "string") {
+                screenshotBuffer = Buffer.from(base64Data, "base64");
+              }
+            }
+          }
+        } catch {
+          // MCP may not support screenshot or browser not active -- silently skip
+        }
+      }
+
       if (!screenshotBuffer) {
         return { screenshotId: null, screenshotPath: null };
       }
@@ -834,7 +879,7 @@ export class PhaseOneRunManager {
         runId,
         stepId,
         SCREENSHOT_DIR,
-        traceWithScreenshot.toolId
+        traceWithScreenshot?.toolId
       );
       const screenshotPath = resolveScreenshotImagePath(runId, stepId, screenshotId, SCREENSHOT_DIR);
       return { screenshotId, screenshotPath };
