@@ -83,6 +83,7 @@ export interface RunDetail extends PersistedRun {
   screenshots: PersistedScreenshot[];
   totalTokens: number;
   estimatedCost: number;
+  videoUrl?: string;
 }
 
 export interface RunDetailResponse {

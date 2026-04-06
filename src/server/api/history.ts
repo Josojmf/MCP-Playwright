@@ -1,5 +1,22 @@
+import { readdir } from "node:fs/promises";
 import { getRun, listRuns } from "../storage/sqlite";
 import { getScreenshot } from "../storage/screenshots";
+
+const DATA_DIR = process.env.DATA_DIR ?? ".data";
+
+async function resolveVideoUrl(runId: string): Promise<string | undefined> {
+  try {
+    const videoDir = `${DATA_DIR}/videos/${runId}`;
+    const files = await readdir(videoDir);
+    const videoFile = files.find((f) => f.endsWith(".webm") || f.endsWith(".mp4"));
+    if (videoFile) {
+      return `/api/videos/${encodeURIComponent(runId)}/${encodeURIComponent(videoFile)}`;
+    }
+  } catch {
+    // No video directory or files
+  }
+  return undefined;
+}
 
 export async function registerHistoryRoutes(server: any) {
   server.get("/api/history", async (request: any, reply: any) => {
@@ -47,10 +64,13 @@ export async function registerHistoryRoutes(server: any) {
         totalAborted: run.steps.filter((s) => s.status === "aborted").length,
       };
 
+      const videoUrl = await resolveVideoUrl(id);
+
       return reply.send({
         status: "success",
         data: {
           ...run,
+          videoUrl,
           metadata: {
             totalTokens: run.totalTokens,
             estimatedCost: run.estimatedCost.toFixed(4),

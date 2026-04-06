@@ -119,6 +119,26 @@ export function RunDetailView({ run, isLoading, error }: RunDetailViewProps) {
         ) : null}
       </div>
 
+      {/* Video playback section - per D-09 */}
+      {run.videoUrl && (
+        <div className="mt-4 rounded border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+          <h3 className="mb-2 text-sm font-semibold text-[var(--app-fg-strong)]">Video de ejecución</h3>
+          <video
+            controls
+            preload="metadata"
+            className="w-full rounded"
+            style={{
+              maxHeight: "480px",
+              background: "#000",
+            }}
+          >
+            <source src={run.videoUrl} type="video/webm" />
+            <source src={run.videoUrl} type="video/mp4" />
+            Tu navegador no soporta la reproducción de video.
+          </video>
+        </div>
+      )}
+
       <div className="mt-4 space-y-2">
         {run.steps.map((step) => (
           <article
