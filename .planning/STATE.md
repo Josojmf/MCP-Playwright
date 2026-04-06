@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: none
-milestone_name: none
-status: v1.0 archived with accepted audit gaps
-stopped_at: Awaiting next milestone definition or phase-archive cleanup approval
-last_updated: "2026-04-05T00:35:00+02:00"
+milestone: v1.0
+milestone_name: Phase 01 - Step-level execution traceability
+status: executing phase 01-step-level-execution-traceability
+stopped_at: "Completed 01-03-PLAN.md"
+last_updated: "2026-04-06T10:48:00Z"
 progress:
-  total_phases: 13
-  completed_phases: 13
+  total_phases: 14
+  completed_phases: 8
   total_plans: 29
-  completed_plans: 29
+  completed_plans: 38
 ---
 
 # Project State
@@ -44,8 +44,16 @@ See: `.planning/PROJECT.md` (updated 2026-04-05)
 
 ## Pending Todos
 
-- `2026-04-01-mostrar-screenshot-o-video-por-paso.md`
+- `2026-04-01-mostrar-screenshot-o-video-por-paso.md` — RESOLVED by Phase 01 plans 01-03
+
+## Phase 01 Decisions
+
+- D-01: Auto-capture screenshot after every step (Plan 01)
+- D-02: Inline 120px thumbnail per step row in live view, click opens ScreenshotLightbox (Plan 03)
+- D-03: Screenshots in history RunDetailView with inline thumbnail + lightbox (Plan 03)
+- tool_call_completed SSE events accumulate per mcpId+stepId key in App state (Plan 03)
+- toolCallsByStep/messagesByStep threaded from App -> McpColumnGrid -> McpColumn for StepDetailPanel (Plan 03)
 
 ---
 
-Updated: 2026-04-05 after archiving `v1.0`
+Updated: 2026-04-06 after completing 01-03-PLAN.md
