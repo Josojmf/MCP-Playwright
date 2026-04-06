@@ -10,7 +10,7 @@
 
 ## Current Status
 
-Phase 1 executing — Wave 1 complete (01-01, 01-02).
+Phase 1 executing — Wave 1 complete (01-01, 01-02). Wave 2 next.
 
 ## Carry-Forward Gaps From v1.0
 

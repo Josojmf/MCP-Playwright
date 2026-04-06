@@ -1,7 +1,9 @@
-import { useEffect, useRef } from "react";
-import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { AlertTriangle, CheckCircle2, ChevronDown, XCircle } from "lucide-react";
 import { statusChipClass, type ProgressState, type StepEvidence } from "@/App";
 import { getStepFlagStyles } from "./StepFlagStyles";
+import { StepDetailPanel } from "./StepDetailPanel";
+import type { ToolCallDetail } from "./StepDetailPanel";
 
 interface McpColumnProps {
   mcpId: string;
@@ -9,10 +11,13 @@ interface McpColumnProps {
   steps: StepEvidence[];
   lastScreenshotId: string | null;
   onScreenshotClick: (title: string, url: string) => void;
+  toolCallsByStep?: Record<string, ToolCallDetail[]>;
+  messagesByStep?: Record<string, string>;
 }
 
-export function McpColumn({ mcpId, progress, steps, lastScreenshotId, onScreenshotClick }: McpColumnProps) {
+export function McpColumn({ mcpId, progress, steps, lastScreenshotId, onScreenshotClick, toolCallsByStep, messagesByStep }: McpColumnProps) {
   const stepListRef = useRef<HTMLDivElement>(null);
+  const [expandedStepId, setExpandedStepId] = useState<string | null>(null);
   const completion = progress.totalSteps > 0
     ? Math.round((progress.completedSteps / progress.totalSteps) * 100)
     : 0;
@@ -172,41 +177,67 @@ export function McpColumn({ mcpId, progress, steps, lastScreenshotId, onScreensh
                 : <XCircle style={{ width: "16px", height: "16px", color: "var(--app-danger)", flexShrink: 0, marginTop: "2px" }} />;
 
           return (
-            <div
-              key={step.id}
-              style={{
-                background: "var(--app-panel)",
-                border: flag.containerStyle ? "1px solid transparent" : "1px solid var(--app-border)",
-                borderRadius: "4px",
-                padding: "8px 16px",
-                display: "flex",
-                alignItems: "flex-start",
-                gap: "8px",
-                ...flag.containerStyle,
-              }}
-            >
-              {leadingIcon}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                {flag.label ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
-                    <span
-                      style={{
-                        fontSize: "11px",
-                        fontWeight: 600,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.10em",
-                        color: flag.accentColor ?? "var(--app-muted)",
-                      }}
-                    >
-                      {flag.label}
-                    </span>
-                  </div>
-                ) : null}
-                <p style={{ fontSize: "14px", color: "var(--app-fg)" }}>{step.stepText}</p>
-                <p style={{ fontSize: "13px", fontFamily: "ui-monospace, 'Cascadia Code', 'Fira Code', monospace", color: "var(--app-muted)", marginTop: "2px" }}>
-                  {step.tokensUsed} tok · {step.latencyMs}ms
-                </p>
+            <div key={step.id}>
+              <div
+                style={{
+                  background: "var(--app-panel)",
+                  border: flag.containerStyle ? "1px solid transparent" : "1px solid var(--app-border)",
+                  borderRadius: "4px",
+                  padding: "8px 16px",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "8px",
+                  cursor: "pointer",
+                  ...flag.containerStyle,
+                }}
+                onClick={() => setExpandedStepId(prev => prev === step.id ? null : step.id)}
+              >
+                {leadingIcon}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {flag.label ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.10em",
+                          color: flag.accentColor ?? "var(--app-muted)",
+                        }}
+                      >
+                        {flag.label}
+                      </span>
+                    </div>
+                  ) : null}
+                  <p style={{ fontSize: "14px", color: "var(--app-fg)" }}>{step.stepText}</p>
+                  <p style={{ fontSize: "13px", fontFamily: "ui-monospace, 'Cascadia Code', 'Fira Code', monospace", color: "var(--app-muted)", marginTop: "2px" }}>
+                    {step.tokensUsed} tok · {step.latencyMs}ms
+                  </p>
+                </div>
+                <ChevronDown
+                  style={{
+                    width: "14px",
+                    height: "14px",
+                    color: "var(--app-muted)",
+                    transition: "transform 150ms",
+                    transform: expandedStepId === step.id ? "rotate(180deg)" : "rotate(0deg)",
+                    flexShrink: 0,
+                    marginTop: "2px",
+                  }}
+                />
               </div>
+
+              {expandedStepId === step.id && (
+                <StepDetailPanel
+                  stepText={step.stepText}
+                  status={step.status}
+                  latencyMs={step.latencyMs}
+                  tokensUsed={step.tokensUsed}
+                  toolCalls={toolCallsByStep?.[step.id] ?? []}
+                  message={messagesByStep?.[step.id]}
+                  timestamp={step.timestamp}
+                />
+              )}
             </div>
           );
         })}
