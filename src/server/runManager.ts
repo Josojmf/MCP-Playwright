@@ -29,6 +29,7 @@ export interface RunEstimateRequest {
   orchestratorModel?: string;
   lowCostAuditorModel?: string;
   highAccuracyAuditorModel?: string;
+  recordVideo?: boolean;
 }
 
 interface NormalizedRunEstimateRequest extends RunEstimateRequest {
@@ -73,6 +74,7 @@ interface RunConfig {
   orchestratorModel: string;
   lowCostAuditorModel: string;
   highAccuracyAuditorModel: string;
+  recordVideo: boolean;
 }
 
 type RunStatus = "pending" | "running" | "completed" | "aborted";
@@ -236,6 +238,7 @@ export class PhaseOneRunManager {
         orchestratorModel,
         lowCostAuditorModel,
         highAccuracyAuditorModel,
+        recordVideo: Boolean(normalizedInput.recordVideo),
       },
       plan,
       estimate,
@@ -401,6 +404,23 @@ export class PhaseOneRunManager {
         totalTokensUsed: session.totals.tokensUsed,
         remainingTokens: budget.getStats().remaining,
       });
+
+      if (session.config.recordVideo) {
+        const videoDir = `${SCREENSHOT_DIR}/videos/${session.id}`;
+        try {
+          const fs = await import("node:fs/promises");
+          const files = await fs.readdir(videoDir);
+          const videoFile = files.find((f) => f.endsWith(".webm") || f.endsWith(".mp4"));
+          if (videoFile) {
+            this.emit(session, "video_available", {
+              runId: session.id,
+              videoUrl: `/api/videos/${encodeURIComponent(session.id)}/${encodeURIComponent(videoFile)}`,
+            });
+          }
+        } catch {
+          // No video directory or files — video recording may not have produced output
+        }
+      }
     } catch (error) {
       session.status = "aborted";
       this.emit(session, "run_aborted", {
@@ -435,7 +455,12 @@ export class PhaseOneRunManager {
 
       const loopDetector = new LoopDetector(3, 20);
       const orchestrator = new OrchestratorService();
-      processManager = new McpProcessManager(mcpId);
+
+      const mcpEnv: Record<string, string> = {};
+      if (session.config.recordVideo) {
+        mcpEnv.PLAYWRIGHT_VIDEO_DIR = `${SCREENSHOT_DIR}/videos/${session.id}`;
+      }
+      processManager = new McpProcessManager(mcpId, mcpEnv);
       const providerConfig = this.resolveProviderConfig(session.config);
 
       // Real MCP client via McpProcessManager (Phase 8)

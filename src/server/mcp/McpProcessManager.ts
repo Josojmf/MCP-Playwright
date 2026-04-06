@@ -25,9 +25,11 @@ export class McpProcessManager implements BaseMcpClient {
   public startedAt: Date | null = null;
   public crashed: boolean = false;
   public crashReason: string | null = null;
+  private extraEnv: Record<string, string>;
 
-  constructor(mcpId: string) {
+  constructor(mcpId: string, extraEnv: Record<string, string> = {}) {
     this.mcpId = mcpId;
+    this.extraEnv = extraEnv;
 
     const entry = MCP_REGISTRY[mcpId];
     if (!entry?.spawnCommand || entry.spawnCommand.length === 0) {
@@ -46,7 +48,11 @@ export class McpProcessManager implements BaseMcpClient {
 
     const [command, ...args] = MCP_REGISTRY[this.mcpId].spawnCommand!;
 
-    this.transport = new StdioClientTransport({ command, args, stderr: 'pipe' });
+    const spawnEnv = Object.keys(this.extraEnv).length > 0
+      ? { ...process.env, ...this.extraEnv } as Record<string, string>
+      : undefined;
+
+    this.transport = new StdioClientTransport({ command, args, stderr: 'pipe', env: spawnEnv });
     this.client = new Client({ name: 'mcp-bench', version: '1.0.0' }, { capabilities: {} });
 
     // Wire crash detection before connecting
