@@ -9,9 +9,15 @@ interface McpColumnProps {
   steps: StepEvidence[];
   lastScreenshotId: string | null;
   onScreenshotClick: (title: string, url: string) => void;
+  toolCallsByStep?: Record<string, Array<{
+    toolId: string; toolName: string; arguments: Record<string, unknown>;
+    status: "success" | "error"; latencyMs: number;
+    result?: string; error?: string; screenshotId?: string;
+  }>>;
+  messagesByStep?: Record<string, string>;
 }
 
-export function McpColumn({ mcpId, progress, steps, lastScreenshotId, onScreenshotClick }: McpColumnProps) {
+export function McpColumn({ mcpId, progress, steps, lastScreenshotId, onScreenshotClick, toolCallsByStep: _toolCallsByStep, messagesByStep: _messagesByStep }: McpColumnProps) {
   const stepListRef = useRef<HTMLDivElement>(null);
   const completion = progress.totalSteps > 0
     ? Math.round((progress.completedSteps / progress.totalSteps) * 100)
