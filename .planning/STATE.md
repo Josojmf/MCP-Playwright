@@ -1,15 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: none
-milestone_name: none
-status: v1.0 archived with accepted audit gaps
-stopped_at: Awaiting next milestone definition or phase-archive cleanup approval
-last_updated: "2026-04-05T00:35:00+02:00"
+milestone: v1.1
+milestone_name: Step-level execution traceability
+status: executing phase 01
+last_updated: "2026-04-06T10:37:41Z"
+stopped_at: "Completed 01-01-PLAN.md"
 progress:
-  total_phases: 13
-  completed_phases: 13
+  total_phases: 14
+  completed_phases: 8
   total_plans: 29
-  completed_plans: 29
+  completed_plans: 39
+current_phase: "01"
+current_plan: "02"
 ---
 
 # Project State
@@ -46,6 +48,18 @@ See: `.planning/PROJECT.md` (updated 2026-04-05)
 
 - `2026-04-01-mostrar-screenshot-o-video-por-paso.md`
 
+## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 1 added: Step-level execution traceability — screenshots, detailed logs, and real-time visibility per step
+
+### Decisions Made
+
+- **01-01:** screenshotId added to StepResult and ToolCallEvent interface for per-step screenshot traceability and real-time SSE tool-call streaming
+- **01-01:** captureStepScreenshot falls back to browser_take_screenshot MCP call when no trace screenshot exists (D-01)
+- **01-01:** tool_call_completed SSE events emitted individually after step_started (D-07, TRACE-07)
+
 ---
 
-Updated: 2026-04-05 after archiving `v1.0`
+Updated: 2026-04-06 — Completed 01-01-PLAN.md (backend screenshot pipeline + tool-call SSE events)
