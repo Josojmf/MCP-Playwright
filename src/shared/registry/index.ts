@@ -9,7 +9,8 @@ export const MCP_REGISTRY: MCPRegistry = {
     parallelismModel: 'multiple',
     tags: ['aria', 'microsoft', 'stable'],
     description: 'Playwright MCP by Microsoft, uses ARIA snapshot mode',
-    spawnCommand: ['npx', '-y', '@playwright/mcp@latest'],
+    // Upstream defaults to headed (visible Chromium). Headless avoids popping a window during bench runs.
+    spawnCommand: ['npx', '-y', '@playwright/mcp@latest', '--headless'],
   },
   '@modelcontextprotocol/server-puppeteer': {
     id: '@modelcontextprotocol/server-puppeteer',

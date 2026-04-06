@@ -9,10 +9,20 @@ import { BudgetExceededError } from "../../shared/harness/TokenBudget";
 import { runAssertion, AssertionResult } from "../validation/assertionsRunner";
 
 /**
- * Completion cap per orchestrator call. Tool decisions are small JSON; a high max_tokens
- * can trigger OpenRouter 402 when remaining credits cover slightly less than requested.
+ * Completion cap per orchestrator call (small JSON). OpenRouter rejects with 402 if
+ * max_tokens exceeds what the account can afford for that request (often low when balance is tight).
+ * Override: MCP_BENCH_ORCHESTRATOR_MAX_TOKENS (32–2048).
  */
-const ORCHESTRATOR_LLM_MAX_TOKENS = 512;
+function orchestratorMaxTokens(): number {
+  const raw = process.env.MCP_BENCH_ORCHESTRATOR_MAX_TOKENS;
+  if (raw !== undefined && raw.trim() !== "") {
+    const n = Number.parseInt(raw, 10);
+    if (Number.isFinite(n) && n >= 32 && n <= 2048) {
+      return n;
+    }
+  }
+  return 256;
+}
 
 const MCP_AGENT_TEMPLATE = `You are a browser automation assistant. You must decide the next single MCP action for the current Gherkin step.
 
@@ -281,7 +291,7 @@ Scenario: ${scenario.name}`,
     const request: LLMRequest = {
       model: ctx.mcpConfig.provider.model || "gpt-4",
       messages: [...currentMessages, stepMessage],
-      maxTokens: ORCHESTRATOR_LLM_MAX_TOKENS,
+      maxTokens: orchestratorMaxTokens(),
     };
 
     ctx.tokenBudget.checkBudget();
@@ -366,7 +376,7 @@ Scenario: ${scenario.name}`,
             },
             ...stepConversation,
           ],
-          maxTokens: ORCHESTRATOR_LLM_MAX_TOKENS,
+          maxTokens: orchestratorMaxTokens(),
           responseFormat: { type: "json_object" },
         }),
         TIMEOUT_TIERS.STEP,
