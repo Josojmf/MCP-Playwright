@@ -42,7 +42,7 @@ test("phase8 contract (INFRA-04): loop detector usa fingerprint de tool call rea
 test("phase8 contract (EXEC-03): executeMcpRun usa McpProcessManager directo en InstrumentedMcpClient", () => {
   assertNormalizedFragments(
     runManagerSource,
-    ["const instrumentedClient = new InstrumentedMcpClient(processManager)"],
+    ["instrumentedClient = new InstrumentedMcpClient(processManager)"],
     "real MCP client wiring"
   );
   assert.doesNotMatch(runManagerSource.text, /stubMcpClient/);

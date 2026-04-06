@@ -20,6 +20,27 @@ test("resolvePricing returns null for unknown model and exact match for known mo
   assert.equal(pricing?.inputPer1MTokens, 2.5);
 });
 
+test("resolvePricing maps openrouter short model id to openai/… pricing entry", () => {
+  const short = resolvePricing("openrouter", "gpt-4o-mini");
+  const full = resolvePricing("openrouter", "openai/gpt-4o-mini");
+  assert.ok(short && full);
+  assert.equal(short?.inputPer1MTokens, full?.inputPer1MTokens);
+});
+
+test("resolvePricing includes OpenRouter free Qwen3.6 Plus at zero estimated rate", () => {
+  const p = resolvePricing("openrouter", "qwen/qwen3.6-plus:free");
+  assert.ok(p);
+  assert.equal(p?.inputPer1MTokens, 0);
+  assert.equal(p?.outputPer1MTokens, 0);
+});
+
+test("resolvePricing treats any OpenRouter :free model id as zero without a table row", () => {
+  const p = resolvePricing("openrouter", "  vendor/model-name:free  ");
+  assert.ok(p);
+  assert.equal(p?.inputPer1MTokens, 0);
+  assert.equal(p?.outputPer1MTokens, 0);
+});
+
 test("pricing table includes at least 15 entries", () => {
   assert.ok(Object.keys(PRICING_TABLE).length >= 15);
 });

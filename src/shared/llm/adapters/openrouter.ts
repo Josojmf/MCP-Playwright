@@ -9,6 +9,25 @@ interface OpenRouterChatCompletionResponse {
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 }
 
+const OPENROUTER_429_RETRIES = 3;
+const OPENROUTER_429_BASE_DELAY_MS = 2000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryAfterMsFromHeaders(response: Response): number | null {
+  const raw = response.headers.get("retry-after");
+  if (!raw) {
+    return null;
+  }
+  const sec = Number(raw);
+  if (Number.isFinite(sec) && sec >= 0) {
+    return Math.min(60_000, Math.max(500, sec * 1000));
+  }
+  return null;
+}
+
 export class OpenRouterAdapter implements LLMProvider {
   private readonly endpoint = "https://openrouter.ai/api/v1/chat/completions";
   private readonly pricingPromise: Promise<Map<string, PricingRecord>>;
@@ -30,26 +49,55 @@ export class OpenRouterAdapter implements LLMProvider {
       headers["HTTP-Referer"] = referer.trim();
     }
 
-    const response = await this.fetchImpl(this.endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: request.model,
-        messages: request.messages,
-        temperature: request.temperature,
-        top_p: request.topP,
-        max_tokens: request.maxTokens,
-        ...(request.responseFormat && { response_format: request.responseFormat }),
-        stream: false,
-      }),
+    const body = JSON.stringify({
+      model: request.model,
+      messages: request.messages,
+      temperature: request.temperature,
+      top_p: request.topP,
+      max_tokens: request.maxTokens,
+      ...(request.responseFormat && { response_format: request.responseFormat }),
+      stream: false,
     });
 
-    if (!response.ok) {
+    const maxAttempts = 1 + OPENROUTER_429_RETRIES;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const response = await this.fetchImpl(this.endpoint, {
+        method: "POST",
+        headers,
+        body,
+      });
+
+      if (response.ok) {
+        return await this.responseToLlmResponse(response, request);
+      }
+
       const responseText = await response.text().catch(() => "");
       const details = responseText ? `: ${responseText.slice(0, 500)}` : "";
-      throw new Error(`OpenRouterAdapter request failed (${response.status})${details}`);
+
+      if (response.status === 429 && attempt < maxAttempts - 1) {
+        const fromHeader = retryAfterMsFromHeaders(response);
+        const backoff = Math.min(20_000, OPENROUTER_429_BASE_DELAY_MS * 2 ** attempt);
+        const waitMs = fromHeader ?? backoff;
+        await sleep(waitMs);
+        continue;
+      }
+
+      const authHint =
+        response.status === 401
+          ? " Revisa la API key: variable OPENROUTER_API_KEY u OPEN_ROUTER_API_KEY en el servidor (reinicia tras editar .env), o el campo OpenRouter en Settings. Claves en https://openrouter.ai/keys . Si pegaste una clave incorrecta en Settings, bórrala para usar la del servidor."
+          : "";
+      const rateHint =
+        response.status === 429
+          ? " Límite de velocidad (429): los modelos :free comparten cupo; espera unos minutos, reintenta, usa otro modelo o configura BYOK en https://openrouter.ai/settings/integrations para límites propios."
+          : "";
+      throw new Error(`OpenRouterAdapter request failed (${response.status})${details}${authHint}${rateHint}`);
     }
 
+    throw new Error("OpenRouterAdapter: unexpected completion loop exit");
+  }
+
+  private async responseToLlmResponse(response: Response, request: LLMRequest): Promise<LLMResponse> {
     const payload = (await response.json()) as OpenRouterChatCompletionResponse;
     const usage: LLMUsage = {
       promptTokens: payload.usage?.prompt_tokens ?? 0,

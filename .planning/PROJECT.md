@@ -10,12 +10,14 @@ Honest, reproducible comparison of MCP tool quality for E2E browser automation.
 
 ## Current State
 
-`v1.0` was archived on 2026-04-04 after Phases 1-13. The shipped codebase includes provider abstraction, registry-driven MCP execution, live run transparency, QA trust-state surfaces, local history/export plumbing, and a substantially improved automated test stack.
+`v1.1` shipped on 2026-04-06 after Phase 1 (step-level execution traceability). Added per-step screenshot capture, expandable step detail with tabbed sections, inline thumbnails in live/history views, SSE tool-call streaming, and optional video recording with playback.
 
-The milestone audit was accepted with known live-path gaps. The most important remaining product work is not new surface area; it is closing the mismatch between what the live runtime claims and what the current execution path actually wires.
+`v1.0` was archived on 2026-04-04 after Phases 1-13 with known live-path gaps.
 
 See:
 
+- `.planning/milestones/v1.1-ROADMAP.md`
+- `.planning/milestones/v1.1-REQUIREMENTS.md`
 - `.planning/milestones/v1.0-ROADMAP.md`
 - `.planning/milestones/v1.0-REQUIREMENTS.md`
 - `.planning/milestones/v1.0-MILESTONE-AUDIT.md`
@@ -29,6 +31,11 @@ See:
 - Live run transparency and post-run scorecard surfaces shipped in `v1.0`.
 - QA trust-state, degradation reason, and execution-config visibility shipped in `v1.0`.
 - Fast/smoke lane testing infrastructure and deterministic runtime fixtures shipped in `v1.0`.
+- Per-step screenshot capture with auto-screenshot fallback — `v1.1`.
+- Expandable step detail rows with tabbed Tools/Reasoning/Timing/Errors sections — `v1.1`.
+- Inline screenshot thumbnails in live execution and history views — `v1.1`.
+- Real-time tool-call SSE streaming during step execution — `v1.1`.
+- Optional Playwright video recording toggle with history playback — `v1.1`.
 
 ### Active
 
@@ -65,6 +72,7 @@ See:
 | Trust-state and degraded-run surfacing | QA needs to know when results are auditable versus suspect | ✓ Shipped |
 | Fast/smoke test split | Daily development should stay deterministic while real-I/O seams remain covered | ✓ Shipped |
 | Live-path assertion and evidence wiring | Truthfulness of benchmark results depends on it | ⚠ Still incomplete |
+| Step-level execution traceability | Per-step visibility builds trust in benchmark results | ✓ Shipped v1.1 |
 
 ---
-*Last updated: 2026-04-05 after archiving v1.0 with accepted audit gaps*
+*Last updated: 2026-04-06 after v1.1 milestone*

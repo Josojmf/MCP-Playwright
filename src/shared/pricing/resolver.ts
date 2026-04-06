@@ -10,8 +10,26 @@ interface OpenRouterModelsResponse {
   }>;
 }
 
+const OPENROUTER_FREE_TIER: PricingRecord = { inputPer1MTokens: 0, outputPer1MTokens: 0 };
+
 export function resolvePricing(provider: string, model: string): PricingRecord | null {
-  return PRICING_TABLE[`${provider}:${model}`] ?? null;
+  const normalizedModel = typeof model === "string" ? model.trim() : "";
+  const direct = PRICING_TABLE[`${provider}:${normalizedModel}`];
+  if (direct) {
+    return direct;
+  }
+  if (provider === "openrouter" && normalizedModel) {
+    if (/:free$/i.test(normalizedModel)) {
+      return OPENROUTER_FREE_TIER;
+    }
+    if (!normalizedModel.includes("/")) {
+      const prefixed = PRICING_TABLE[`openrouter:openai/${normalizedModel}`];
+      if (prefixed) {
+        return prefixed;
+      }
+    }
+  }
+  return null;
 }
 
 export function estimateCostUsd(inputTokens: number, outputTokens: number, pricing: PricingRecord): number {

@@ -31,4 +31,12 @@ export const PRICING_TABLE: Record<string, PricingRecord> = {
 
   "openrouter:default": { inputPer1MTokens: 8, outputPer1MTokens: 24 },
   "openrouter:openrouter/auto": { inputPer1MTokens: 10, outputPer1MTokens: 30 },
+  /** OpenRouter IDs are usually `provider/model`; short names like `gpt-4o-mini` are also listed for estimates. */
+  "openrouter:gpt-4o-mini": { inputPer1MTokens: 0.15, outputPer1MTokens: 0.6 },
+  "openrouter:openai/gpt-4o-mini": { inputPer1MTokens: 0.15, outputPer1MTokens: 0.6 },
+  "openrouter:openai/gpt-4o": { inputPer1MTokens: 2.5, outputPer1MTokens: 10 },
+  "openrouter:openai/gpt-4.1": { inputPer1MTokens: 2, outputPer1MTokens: 8 },
+  "openrouter:openai/gpt-4.1-mini": { inputPer1MTokens: 0.4, outputPer1MTokens: 1.6 },
+  /** OpenRouter free tier (pricing shown as $0/M on the model page). */
+  "openrouter:qwen/qwen3.6-plus:free": { inputPer1MTokens: 0, outputPer1MTokens: 0 },
 };

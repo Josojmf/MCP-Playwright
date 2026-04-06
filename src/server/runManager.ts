@@ -20,6 +20,17 @@ import { createProvider } from "../shared/llm/factory";
 
 type ProviderType = "openai" | "claude" | "azure" | "openrouter";
 
+/** Optional overrides sent from the UI; env vars apply when these are empty. */
+export interface LlmCredentialsPayload {
+  openaiApiKey?: string;
+  openrouterApiKey?: string;
+  anthropicApiKey?: string;
+  azureOpenAiApiKey?: string;
+  azureOpenAiEndpoint?: string;
+  azureOpenAiDeployment?: string;
+  azureOpenAiApiVersion?: string;
+}
+
 export interface RunEstimateRequest {
   baseUrl: string;
   featureText: string;
@@ -30,6 +41,7 @@ export interface RunEstimateRequest {
   lowCostAuditorModel?: string;
   highAccuracyAuditorModel?: string;
   recordVideo?: boolean;
+  llmCredentials?: LlmCredentialsPayload;
 }
 
 interface NormalizedRunEstimateRequest extends RunEstimateRequest {
@@ -75,6 +87,7 @@ interface RunConfig {
   lowCostAuditorModel: string;
   highAccuracyAuditorModel: string;
   recordVideo: boolean;
+  llmCredentials?: LlmCredentialsPayload;
 }
 
 type RunStatus = "pending" | "running" | "completed" | "aborted";
@@ -239,6 +252,7 @@ export class PhaseOneRunManager {
         lowCostAuditorModel,
         highAccuracyAuditorModel,
         recordVideo: Boolean(normalizedInput.recordVideo),
+        llmCredentials: normalizedInput.llmCredentials,
       },
       plan,
       estimate,
@@ -637,7 +651,7 @@ export class PhaseOneRunManager {
       if (normalizedStepStatus === "passed" && screenshotPath) {
         // Build auditorProvider from config using low-cost model for initial construction
         const auditorProvider = await createProvider({
-          provider: session.config.provider,
+          ...this.resolveProviderConfig(session.config),
           model: session.config.lowCostAuditorModel,
         });
 
@@ -983,6 +997,7 @@ export class PhaseOneRunManager {
       orchestratorModel,
       lowCostAuditorModel,
       highAccuracyAuditorModel,
+      llmCredentials: input.llmCredentials,
     };
   }
 
@@ -1114,17 +1129,34 @@ export class PhaseOneRunManager {
       return undefined;
     };
 
+    const cred = config.llmCredentials;
+    const pickCred = (key: keyof LlmCredentialsPayload): string | undefined => {
+      const raw = cred?.[key];
+      return typeof raw === "string" && raw.trim() ? raw.trim() : undefined;
+    };
+
     // Auto-detect provider based on available credentials as fallback
     let activeProvider = process.env.DEFAULT_PROVIDER || config.provider;
-    
-    if (activeProvider === "openai" && !valueFromEnv("OPENAI_API_KEY")) {
-      if (valueFromEnv("OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY")) activeProvider = "openrouter";
-      else if (valueFromEnv("ANTHROPIC_API_KEY")) activeProvider = "claude";
-      else if (valueFromEnv("AZURE_OPENAI_API_KEY") && valueFromEnv("AZURE_OPENAI_ENDPOINT")) activeProvider = "azure";
+
+    if (
+      activeProvider === "openai" &&
+      !valueFromEnv("OPENAI_API_KEY") &&
+      !pickCred("openaiApiKey")
+    ) {
+      if (valueFromEnv("OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY") || pickCred("openrouterApiKey")) {
+        activeProvider = "openrouter";
+      } else if (valueFromEnv("ANTHROPIC_API_KEY") || pickCred("anthropicApiKey")) {
+        activeProvider = "claude";
+      } else if (
+        (valueFromEnv("AZURE_OPENAI_API_KEY") || pickCred("azureOpenAiApiKey")) &&
+        (valueFromEnv("AZURE_OPENAI_ENDPOINT") || pickCred("azureOpenAiEndpoint"))
+      ) {
+        activeProvider = "azure";
+      }
     }
 
     if (activeProvider === "openai") {
-      const openAiKey = valueFromEnv("OPENAI_API_KEY");
+      const openAiKey = pickCred("openaiApiKey") ?? valueFromEnv("OPENAI_API_KEY");
       if (!openAiKey) {
         throw new RequestValidationError("Falta OPENAI_API_KEY para ejecutar con provider openai.");
       }
@@ -1132,11 +1164,12 @@ export class PhaseOneRunManager {
       return {
         provider: "openai",
         model: config.orchestratorModel,
+        apiKey: openAiKey,
       };
     }
 
     if (activeProvider === "openrouter") {
-      const openRouterKey = valueFromEnv("OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY");
+      const openRouterKey = pickCred("openrouterApiKey") ?? valueFromEnv("OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY");
       if (!openRouterKey) {
         throw new RequestValidationError("Falta OPENROUTER_API_KEY para ejecutar con provider openrouter.");
       }
@@ -1144,11 +1177,12 @@ export class PhaseOneRunManager {
       return {
         provider: "openrouter",
         model: config.orchestratorModel,
+        apiKey: openRouterKey,
       };
     }
 
     if (activeProvider === "claude") {
-      const claudeKey = valueFromEnv("ANTHROPIC_API_KEY");
+      const claudeKey = pickCred("anthropicApiKey") ?? valueFromEnv("ANTHROPIC_API_KEY");
       if (!claudeKey) {
         throw new RequestValidationError("Falta ANTHROPIC_API_KEY para ejecutar con provider claude.");
       }
@@ -1156,13 +1190,15 @@ export class PhaseOneRunManager {
       return {
         provider: "claude",
         model: config.orchestratorModel,
+        apiKey: claudeKey,
       };
     }
 
     if (activeProvider === "azure") {
-      const azureKey = valueFromEnv("AZURE_OPENAI_API_KEY");
-      const azureEndpoint = valueFromEnv("AZURE_OPENAI_ENDPOINT");
-      const azureDeployment = valueFromEnv("AZURE_OPENAI_DEPLOYMENT") ?? config.orchestratorModel;
+      const azureKey = pickCred("azureOpenAiApiKey") ?? valueFromEnv("AZURE_OPENAI_API_KEY");
+      const azureEndpoint = pickCred("azureOpenAiEndpoint") ?? valueFromEnv("AZURE_OPENAI_ENDPOINT");
+      const azureDeployment =
+        pickCred("azureOpenAiDeployment") ?? valueFromEnv("AZURE_OPENAI_DEPLOYMENT") ?? config.orchestratorModel;
       if (!azureKey || !azureEndpoint) {
         throw new RequestValidationError(
           "Faltan credenciales Azure OpenAI. Define AZURE_OPENAI_API_KEY y AZURE_OPENAI_ENDPOINT."
@@ -1172,9 +1208,10 @@ export class PhaseOneRunManager {
       return {
         provider: "azure",
         model: config.orchestratorModel,
+        apiKey: azureKey,
         azureEndpoint,
         azureDeploymentName: azureDeployment,
-        azureApiVersion: valueFromEnv("AZURE_OPENAI_API_VERSION"),
+        azureApiVersion: pickCred("azureOpenAiApiVersion") ?? valueFromEnv("AZURE_OPENAI_API_VERSION"),
       };
     }
 

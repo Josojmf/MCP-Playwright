@@ -395,6 +395,15 @@ export function saveScreenshot(
   stmt.run(screenshotId, runId, resolvedStepId, toolCallId ?? null, path, new Date().toISOString());
 }
 
+/** Ruta en disco guardada al persistir el run (fallback si getScreenshot no encuentra el fichero). */
+export function getPersistedScreenshotPathById(screenshotId: string): string | null {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT path FROM screenshots WHERE id = ?")
+    .get(screenshotId) as { path?: string } | undefined;
+  return row?.path ? String(row.path) : null;
+}
+
 export function getLatestRunId(): string | null {
   const db = getDb();
   const row = db.prepare("SELECT id FROM runs ORDER BY startedAt DESC LIMIT 1").get() as { id?: string } | undefined;

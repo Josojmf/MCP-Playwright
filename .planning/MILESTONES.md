@@ -1,5 +1,18 @@
 # Milestones
 
+## v1.1 Step-Level Traceability (Shipped: 2026-04-06)
+
+**Phases completed:** 2 phases, 4 plans, 8 tasks
+
+**Key accomplishments:**
+
+- Backend per-step screenshot capture with auto-screenshot fallback and granular tool-call SSE streaming
+- Expandable step rows with four-tab StepDetailPanel (Tools, Reasoning, Timing, Errors)
+- Inline 120px screenshot thumbnails in live + history views with tool_call_completed SSE wiring
+- Optional Playwright video recording toggle with conditional video player in run history
+
+---
+
 ## v1.0 milestone
 
 **Shipped:** 2026-04-04  

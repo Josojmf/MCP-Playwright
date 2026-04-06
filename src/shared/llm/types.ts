@@ -52,6 +52,8 @@ export type ProviderName = "openrouter" | "azure" | "openai" | "claude";
 export interface ProviderConfig {
   provider: ProviderName;
   model?: string;
+  /** When set, overrides API key from environment for this provider. */
+  apiKey?: string;
   azureDeploymentName?: string;
   azureEndpoint?: string;
   azureApiVersion?: string;

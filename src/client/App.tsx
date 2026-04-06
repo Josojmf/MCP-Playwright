@@ -134,6 +134,13 @@ const DEFAULT_FEATURE = `Feature: Checkout Smoke\n  Background:\n    Given I ope
 const STORAGE_KEY = "mcp-bench:run-config";
 const PROVIDER_OPTIONS: RunProvider[] = ["openai", "claude", "azure", "openrouter"];
 
+const PROVIDER_LABELS: Record<RunProvider, string> = {
+  openai: "OpenAI",
+  claude: "Anthropic (Claude)",
+  azure: "Azure OpenAI",
+  openrouter: "OpenRouter",
+};
+
 function App() {
   const [persisted] = useState<PersistedConfig>(() => loadPersistedConfig());
   const [activeSection, setActiveSection] = useState<SidebarSection>("new_run");
@@ -143,11 +150,22 @@ function App() {
   const [featureText, setFeatureText] = useState(persisted.featureText ?? DEFAULT_FEATURE);
   const [tokenCap, setTokenCap] = useState<number>(persisted.tokenCap ?? 12000);
   const [provider, setProvider] = useState<RunProvider>(persisted.provider ?? "openai");
-  const [orchestratorModel, setOrchestratorModel] = useState(persisted.orchestratorModel ?? "gpt-4o-mini");
-  const [lowCostAuditorModel, setLowCostAuditorModel] = useState(persisted.lowCostAuditorModel ?? "gpt-4.1-mini");
-  const [highAccuracyAuditorModel, setHighAccuracyAuditorModel] = useState(
-    persisted.highAccuracyAuditorModel ?? "gpt-4.1"
+  const [orchestratorModel, setOrchestratorModel] = useState(
+    persisted.orchestratorModel ?? "qwen/qwen3.6-plus:free"
   );
+  const [lowCostAuditorModel, setLowCostAuditorModel] = useState(
+    persisted.lowCostAuditorModel ?? "minimax/minimax-m2.5:free"
+  );
+  const [highAccuracyAuditorModel, setHighAccuracyAuditorModel] = useState(
+    persisted.highAccuracyAuditorModel ?? "nemotron-3-super-120b-a12b:free"
+  );
+  const [openaiApiKey, setOpenaiApiKey] = useState(persisted.openaiApiKey ?? "");
+  const [openrouterApiKey, setOpenrouterApiKey] = useState(persisted.openrouterApiKey ?? "");
+  const [anthropicApiKey, setAnthropicApiKey] = useState(persisted.anthropicApiKey ?? "");
+  const [azureOpenAiApiKey, setAzureOpenAiApiKey] = useState(persisted.azureOpenAiApiKey ?? "");
+  const [azureOpenAiEndpoint, setAzureOpenAiEndpoint] = useState(persisted.azureOpenAiEndpoint ?? "");
+  const [azureOpenAiDeployment, setAzureOpenAiDeployment] = useState(persisted.azureOpenAiDeployment ?? "");
+  const [azureOpenAiApiVersion, setAzureOpenAiApiVersion] = useState(persisted.azureOpenAiApiVersion ?? "");
   const [selectedMcpIds, setSelectedMcpIds] = useState<string[]>(() => {
     const enabledIds = MCP_OPTIONS.filter((item) => !item.disabled).map((item) => item.id);
     if (persisted.selectedMcpIds && persisted.selectedMcpIds.length > 0) {
@@ -204,6 +222,13 @@ function App() {
         lowCostAuditorModel,
         highAccuracyAuditorModel,
         selectedMcpIds,
+        openaiApiKey,
+        openrouterApiKey,
+        anthropicApiKey,
+        azureOpenAiApiKey,
+        azureOpenAiEndpoint,
+        azureOpenAiDeployment,
+        azureOpenAiApiVersion,
       })
     );
   }, [
@@ -216,6 +241,13 @@ function App() {
     lowCostAuditorModel,
     highAccuracyAuditorModel,
     selectedMcpIds,
+    openaiApiKey,
+    openrouterApiKey,
+    anthropicApiKey,
+    azureOpenAiApiKey,
+    azureOpenAiEndpoint,
+    azureOpenAiDeployment,
+    azureOpenAiApiVersion,
   ]);
 
   useEffect(() => {
@@ -378,6 +410,15 @@ function App() {
     lowCostAuditorModel: lowCostAuditorModel.trim(),
     highAccuracyAuditorModel: highAccuracyAuditorModel.trim(),
     recordVideo,
+    llmCredentials: {
+      ...(openaiApiKey.trim() ? { openaiApiKey: openaiApiKey.trim() } : {}),
+      ...(openrouterApiKey.trim() ? { openrouterApiKey: openrouterApiKey.trim() } : {}),
+      ...(anthropicApiKey.trim() ? { anthropicApiKey: anthropicApiKey.trim() } : {}),
+      ...(azureOpenAiApiKey.trim() ? { azureOpenAiApiKey: azureOpenAiApiKey.trim() } : {}),
+      ...(azureOpenAiEndpoint.trim() ? { azureOpenAiEndpoint: azureOpenAiEndpoint.trim() } : {}),
+      ...(azureOpenAiDeployment.trim() ? { azureOpenAiDeployment: azureOpenAiDeployment.trim() } : {}),
+      ...(azureOpenAiApiVersion.trim() ? { azureOpenAiApiVersion: azureOpenAiApiVersion.trim() } : {}),
+    },
   };
 
   const estimateRun = async () => {
@@ -933,53 +974,29 @@ function App() {
                         />
                       </label>
 
-                      <label className="field">
-                        <span className="field-label">Provider</span>
-                        <select
-                          value={provider}
-                          onChange={(event) => setProvider(event.target.value as RunProvider)}
-                          className="field-input"
-                        >
-                          {PROVIDER_OPTIONS.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-
-                      <label className="field">
-                        <span className="field-label">Modelo orquestador</span>
-                        <input
-                          type="text"
-                          value={orchestratorModel}
-                          onChange={(event) => setOrchestratorModel(event.target.value)}
-                          className="field-input font-mono"
-                          placeholder="gpt-4o-mini"
-                        />
-                      </label>
-
-                      <label className="field">
-                        <span className="field-label">Auditor low-cost</span>
-                        <input
-                          type="text"
-                          value={lowCostAuditorModel}
-                          onChange={(event) => setLowCostAuditorModel(event.target.value)}
-                          className="field-input font-mono"
-                          placeholder="gpt-4.1-mini"
-                        />
-                      </label>
-
-                      <label className="field lg:col-span-2">
-                        <span className="field-label">Auditor high-accuracy</span>
-                        <input
-                          type="text"
-                          value={highAccuracyAuditorModel}
-                          onChange={(event) => setHighAccuracyAuditorModel(event.target.value)}
-                          className="field-input font-mono"
-                          placeholder="gpt-4.1"
-                        />
-                      </label>
+                      <div className="field lg:col-span-2">
+                        <span className="field-label">Modelos y proveedor LLM</span>
+                        <div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-panel)] p-4">
+                          <p className="text-sm text-[var(--app-fg-strong)]">
+                            <span className="font-medium">{PROVIDER_LABELS[provider]}</span>
+                            <span className="text-[var(--app-muted)]"> · </span>
+                            <span className="font-mono">{orchestratorModel}</span>
+                          </p>
+                          <p className="mt-2 text-xs text-[var(--app-muted)]">
+                            Auditores:{" "}
+                            <span className="font-mono text-[var(--app-fg)]">{lowCostAuditorModel}</span>
+                            {" / "}
+                            <span className="font-mono text-[var(--app-fg)]">{highAccuracyAuditorModel}</span>
+                          </p>
+                          <button
+                            type="button"
+                            className="mt-3 app-soft-button text-xs"
+                            onClick={() => setActiveSection("settings")}
+                          >
+                            Configurar en Settings
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </article>
 
@@ -1250,9 +1267,167 @@ function App() {
           {activeSection === "settings" ? (
             <section className="panel panel-animated p-4 sm:p-5">
               <h2 className="section-title mb-3">Settings</h2>
-              <p className="text-sm text-[var(--app-muted)]">
-                Configuración técnica en progreso. De momento puedes ajustar `token cap`, seleccionar MCPs y cambiar tema desde esta pantalla.
+              <p className="mb-6 text-sm text-[var(--app-muted)]">
+                Elige el proveedor activo, los modelos y las credenciales. OpenRouter es independiente de OpenAI y de Azure OpenAI;
+                cada bloque tiene su propia API key. Los valores se guardan en el navegador (localStorage); en producción sigue siendo
+                preferible usar variables de entorno en el servidor.
               </p>
+
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <label className="field">
+                    <span className="field-label">Proveedor activo</span>
+                    <select
+                      value={provider}
+                      onChange={(event) => setProvider(event.target.value as RunProvider)}
+                      className="field-input"
+                    >
+                      {PROVIDER_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {PROVIDER_LABELS[option]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div>
+                  <h3 className="mb-3 text-sm font-semibold text-[var(--app-fg-strong)]">Modelos</h3>
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    <label className="field">
+                      <span className="field-label">Modelo orquestador</span>
+                      <input
+                        type="text"
+                        value={orchestratorModel}
+                        onChange={(event) => setOrchestratorModel(event.target.value)}
+                        className="field-input font-mono"
+                        placeholder="qwen/qwen3.6-plus:free"
+                      />
+                    </label>
+                    <label className="field">
+                      <span className="field-label">Auditor low-cost</span>
+                      <input
+                        type="text"
+                        value={lowCostAuditorModel}
+                        onChange={(event) => setLowCostAuditorModel(event.target.value)}
+                        className="field-input font-mono"
+                        placeholder="minimax/minimax-m2.5:free"
+                      />
+                    </label>
+                    <label className="field lg:col-span-2">
+                      <span className="field-label">Auditor high-accuracy</span>
+                      <input
+                        type="text"
+                        value={highAccuracyAuditorModel}
+                        onChange={(event) => setHighAccuracyAuditorModel(event.target.value)}
+                        className="field-input font-mono"
+                        placeholder="nemotron-3-super-120b-a12b:free"
+                      />
+                    </label>
+                  </div>
+                  <p className="mt-2 text-xs text-[var(--app-muted)]">
+                    En OpenRouter usa el id exacto del catálogo (p. ej.{" "}
+                    <code className="font-mono">openai/gpt-4o-mini</code>,{" "}
+                    <code className="font-mono">qwen/qwen3.6-plus:free</code>).
+                  </p>
+                </div>
+
+                <fieldset className="rounded-xl border border-[var(--app-border)] p-4">
+                  <legend className="px-1 text-sm font-semibold text-[var(--app-fg-strong)]">OpenAI</legend>
+                  <label className="field mt-2">
+                    <span className="field-label">OPENAI_API_KEY (opcional si está en el servidor)</span>
+                    <input
+                      type="password"
+                      value={openaiApiKey}
+                      onChange={(event) => setOpenaiApiKey(event.target.value)}
+                      className="field-input font-mono"
+                      placeholder="sk-…"
+                      autoComplete="off"
+                    />
+                  </label>
+                </fieldset>
+
+                <fieldset className="rounded-xl border border-[var(--app-border)] p-4">
+                  <legend className="px-1 text-sm font-semibold text-[var(--app-fg-strong)]">OpenRouter</legend>
+                  <label className="field mt-2">
+                    <span className="field-label">OPENROUTER_API_KEY</span>
+                    <input
+                      type="password"
+                      value={openrouterApiKey}
+                      onChange={(event) => setOpenrouterApiKey(event.target.value)}
+                      className="field-input font-mono"
+                      placeholder="sk-or-…"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <p className="mt-2 text-xs text-[var(--app-muted)]">
+                    HTTP Referer y nombre de app siguen leyendo{" "}
+                    <code className="font-mono">OPENROUTER_HTTP_REFERER</code> / <code className="font-mono">OPENROUTER_APP_NAME</code>{" "}
+                    en el proceso del servidor.
+                  </p>
+                </fieldset>
+
+                <fieldset className="rounded-xl border border-[var(--app-border)] p-4">
+                  <legend className="px-1 text-sm font-semibold text-[var(--app-fg-strong)]">Anthropic (Claude)</legend>
+                  <label className="field mt-2">
+                    <span className="field-label">ANTHROPIC_API_KEY</span>
+                    <input
+                      type="password"
+                      value={anthropicApiKey}
+                      onChange={(event) => setAnthropicApiKey(event.target.value)}
+                      className="field-input font-mono"
+                      placeholder="sk-ant-…"
+                      autoComplete="off"
+                    />
+                  </label>
+                </fieldset>
+
+                <fieldset className="rounded-xl border border-[var(--app-border)] p-4">
+                  <legend className="px-1 text-sm font-semibold text-[var(--app-fg-strong)]">Azure OpenAI</legend>
+                  <div className="mt-2 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    <label className="field lg:col-span-2">
+                      <span className="field-label">AZURE_OPENAI_ENDPOINT</span>
+                      <input
+                        type="url"
+                        value={azureOpenAiEndpoint}
+                        onChange={(event) => setAzureOpenAiEndpoint(event.target.value)}
+                        className="field-input font-mono"
+                        placeholder="https://….openai.azure.com/"
+                      />
+                    </label>
+                    <label className="field">
+                      <span className="field-label">AZURE_OPENAI_API_KEY</span>
+                      <input
+                        type="password"
+                        value={azureOpenAiApiKey}
+                        onChange={(event) => setAzureOpenAiApiKey(event.target.value)}
+                        className="field-input font-mono"
+                        autoComplete="off"
+                      />
+                    </label>
+                    <label className="field">
+                      <span className="field-label">Deployment</span>
+                      <input
+                        type="text"
+                        value={azureOpenAiDeployment}
+                        onChange={(event) => setAzureOpenAiDeployment(event.target.value)}
+                        className="field-input font-mono"
+                        placeholder="nombre del deployment"
+                      />
+                    </label>
+                    <label className="field lg:col-span-2">
+                      <span className="field-label">API version (opcional)</span>
+                      <input
+                        type="text"
+                        value={azureOpenAiApiVersion}
+                        onChange={(event) => setAzureOpenAiApiVersion(event.target.value)}
+                        className="field-input font-mono"
+                        placeholder="2024-12-01-preview"
+                      />
+                    </label>
+                  </div>
+                </fieldset>
+              </div>
             </section>
           ) : null}
             </div>
@@ -1337,6 +1512,13 @@ interface PersistedConfig {
   lowCostAuditorModel?: string;
   highAccuracyAuditorModel?: string;
   selectedMcpIds?: string[];
+  openaiApiKey?: string;
+  openrouterApiKey?: string;
+  anthropicApiKey?: string;
+  azureOpenAiApiKey?: string;
+  azureOpenAiEndpoint?: string;
+  azureOpenAiDeployment?: string;
+  azureOpenAiApiVersion?: string;
 }
 
 function loadPersistedConfig(): PersistedConfig {

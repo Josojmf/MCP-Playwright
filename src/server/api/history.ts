@@ -1,5 +1,6 @@
-import { readdir } from "node:fs/promises";
-import { getRun, listRuns } from "../storage/sqlite";
+import path from "node:path";
+import { readFile, readdir } from "node:fs/promises";
+import { getRun, getPersistedScreenshotPathById, listRuns } from "../storage/sqlite";
 import { getScreenshot } from "../storage/screenshots";
 
 const DATA_DIR = process.env.DATA_DIR ?? ".data";
@@ -195,7 +196,19 @@ export async function registerHistoryRoutes(server: any) {
         return reply.code(400).send({ status: "error", message: "screenshotId requerido" });
       }
 
-      const buffer = await getScreenshot(screenshotId, process.env.DATA_DIR ?? ".data");
+      const dataDir = process.env.DATA_DIR ?? ".data";
+      let buffer = await getScreenshot(screenshotId, dataDir);
+      if (!buffer) {
+        const fromDb = getPersistedScreenshotPathById(screenshotId);
+        if (fromDb) {
+          try {
+            const resolved = path.isAbsolute(fromDb) ? fromDb : path.resolve(process.cwd(), fromDb);
+            buffer = await readFile(resolved);
+          } catch {
+            buffer = undefined;
+          }
+        }
+      }
       if (!buffer) {
         return reply.code(404).send({ status: "error", message: "Screenshot no encontrado" });
       }

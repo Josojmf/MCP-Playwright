@@ -187,9 +187,10 @@ test("createRun conserva MCPs normalizados y estimate coherente para ejecucion d
   );
 
   const session = (manager as any).sessions.get(run.runId);
-  assert.deepEqual(session.config.selectedMcpIds, ["@browserbasehq/mcp", "@modelcontextprotocol/server-puppeteer"]);
+  // Browserbase is HTTP-only in the registry (no spawnCommand), so createRun drops it and keeps stdio MCPs only.
+  assert.deepEqual(session.config.selectedMcpIds, ["@modelcontextprotocol/server-puppeteer"]);
   assert.equal(session.plan.length, 1);
   assert.equal(session.plan[0].steps.length, 3);
-  assert.equal(run.estimate.totalExecutions, 6);
+  assert.equal(run.estimate.totalExecutions, 3);
   assert.equal(run.estimate.withinBudget, true);
 });
