@@ -1,5 +1,8 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { access } from "node:fs/promises";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 import Fastify from "fastify";
 import { BudgetExceededError } from "../shared/harness/TokenBudget";
@@ -228,6 +231,30 @@ server.get("/stream/:runId", (request, reply) => {
   });
 
   return reply;
+});
+
+const DATA_DIR = process.env.DATA_DIR ?? ".data";
+
+server.get("/api/videos/:runId/:filename", async (request, reply) => {
+  const { runId, filename } = request.params as { runId: string; filename: string };
+  const videoPath = path.join(DATA_DIR, "videos", runId, filename);
+  const resolvedPath = path.resolve(videoPath);
+  const resolvedDataDir = path.resolve(DATA_DIR);
+
+  if (!resolvedPath.startsWith(resolvedDataDir)) {
+    return reply.code(403).send({ error: "Forbidden" });
+  }
+
+  try {
+    await access(resolvedPath);
+  } catch {
+    return reply.code(404).send({ error: "Video no encontrado" });
+  }
+
+  const contentType = filename.endsWith(".mp4") ? "video/mp4" : "video/webm";
+  reply.header("Content-Type", contentType);
+  reply.header("Cache-Control", "public, max-age=300");
+  return reply.send(createReadStream(resolvedPath));
 });
 
 const start = async () => {

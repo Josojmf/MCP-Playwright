@@ -176,6 +176,7 @@ function App() {
   const [historyDetailLoading, setHistoryDetailLoading] = useState(false);
   const [historyDetailError, setHistoryDetailError] = useState<string | null>(null);
   const [cumulativeCost, setCumulativeCost] = useState<{ totalUsd: number; runCount: number } | null>(null);
+  const [recordVideo, setRecordVideo] = useState(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -365,6 +366,7 @@ function App() {
     orchestratorModel: orchestratorModel.trim(),
     lowCostAuditorModel: lowCostAuditorModel.trim(),
     highAccuracyAuditorModel: highAccuracyAuditorModel.trim(),
+    recordVideo,
   };
 
   const estimateRun = async () => {
@@ -1006,6 +1008,19 @@ function App() {
                         className="h-2 rounded-full bg-[var(--app-accent)] transition-all duration-300"
                         style={{ width: `${summary.progressPercent}%` }}
                       />
+                    </div>
+
+                    <div className="mt-4">
+                      <label className="flex items-center gap-2 text-sm text-[var(--app-fg)]">
+                        <input
+                          type="checkbox"
+                          checked={recordVideo}
+                          onChange={(e) => setRecordVideo(e.target.checked)}
+                          className="rounded border-[var(--app-border)] bg-[var(--app-panel-strong)]"
+                        />
+                        <span>Grabar video</span>
+                        <span className="text-xs text-[var(--app-muted)]">(Playwright)</span>
+                      </label>
                     </div>
 
                     <div className="mt-4 flex flex-wrap gap-2">
