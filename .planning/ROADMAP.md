@@ -10,7 +10,11 @@
 
 ## Current Status
 
-No active milestone is defined in the working planning surface.
+**Active:** Phase 01 — Step-level execution traceability (screenshots, detailed logs, real-time visibility per step)
+
+| Phase | Name | Plans | Summaries | Status |
+|-------|------|-------|-----------|--------|
+| 01 | Step-level execution traceability | 4 | 2 | In progress (Plan 02/04 done) |
 
 Use `$gsd-new-milestone` to start the next milestone and create fresh requirements and roadmap scope.
 
