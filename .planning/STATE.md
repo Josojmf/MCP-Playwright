@@ -1,15 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: none
-milestone_name: none
+milestone: v1.0
+milestone_name: - Live MCP runs still need real translated `Then` assertion enforcement.
 status: v1.0 archived with accepted audit gaps
-stopped_at: Awaiting next milestone definition or phase-archive cleanup approval
-last_updated: "2026-04-05T00:35:00+02:00"
+last_updated: "2026-04-06T10:48:59.854Z"
 progress:
   total_phases: 13
-  completed_phases: 13
+  completed_phases: 8
   total_plans: 29
-  completed_plans: 29
+  completed_plans: 37
 ---
 
 # Project State
