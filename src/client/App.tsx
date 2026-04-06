@@ -81,6 +81,7 @@ export interface ProgressState {
 
 export interface StepEvidence {
   id: string;
+  stepId?: string;
   stepText: string;
   status: "passed" | "failed";
   latencyMs: number;
@@ -176,6 +177,16 @@ function App() {
   const [historyDetailLoading, setHistoryDetailLoading] = useState(false);
   const [historyDetailError, setHistoryDetailError] = useState<string | null>(null);
   const [cumulativeCost, setCumulativeCost] = useState<{ totalUsd: number; runCount: number } | null>(null);
+  const [toolCallsByMcpAndStep, setToolCallsByMcpAndStep] = useState<
+    Record<string, Record<string, Array<{
+      toolId: string; toolName: string; arguments: Record<string, unknown>;
+      status: "success" | "error"; latencyMs: number;
+      result?: string; error?: string; screenshotId?: string;
+    }>>>
+  >({});
+  const [messagesByMcpAndStep, setMessagesByMcpAndStep] = useState<
+    Record<string, Record<string, string>>
+  >({});
 
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -414,6 +425,8 @@ function App() {
     setLastScreenshotByMcp({});
     setStepEvidenceByMcp({});
     setRunMetaByMcp({});
+    setToolCallsByMcpAndStep({});
+    setMessagesByMcpAndStep({});
 
     try {
       const response = await fetch("/api/runs/start", {
@@ -534,6 +547,7 @@ function App() {
       const videoUrl = getString(data.videoUrl);
       const trustState = getString(data.trustState);
       const trustReasons = getStringArray(data.trustReasons);
+      const stepId = getString(data.stepId);
 
       setProgressByMcp((previous) => {
         const current = previous[mcpId];
@@ -569,8 +583,20 @@ function App() {
           },
         }));
       }
+      const evidenceId = `${mcpId}-${Date.now()}-${Math.random()}`;
+      const resolvedStepId = stepId || evidenceId;
+      if (stepId) {
+        setMessagesByMcpAndStep((prev) => ({
+          ...prev,
+          [mcpId]: {
+            ...(prev[mcpId] ?? {}),
+            [resolvedStepId]: stepText,
+          },
+        }));
+      }
       appendStepEvidence(mcpId, {
-        id: `${mcpId}-${Date.now()}-${Math.random()}`,
+        id: evidenceId,
+        stepId: stepId || undefined,
         stepText,
         status: "passed",
         latencyMs,
@@ -601,6 +627,7 @@ function App() {
       const needsReview = getBoolean(data.needsReview);
       const trustState = getString(data.trustState);
       const trustReasons = getStringArray(data.trustReasons);
+      const stepId = getString(data.stepId);
 
       setProgressByMcp((previous) => {
         const current = previous[mcpId];
@@ -641,8 +668,21 @@ function App() {
           },
         }));
       }
+      const failedEvidenceId = `${mcpId}-${Date.now()}-${Math.random()}`;
+      const resolvedFailedStepId = stepId || failedEvidenceId;
+      const failedStepMessage = getString(data.message).trim() || getString(data.error).trim();
+      if (failedStepMessage) {
+        setMessagesByMcpAndStep((prev) => ({
+          ...prev,
+          [mcpId]: {
+            ...(prev[mcpId] ?? {}),
+            [resolvedFailedStepId]: failedStepMessage,
+          },
+        }));
+      }
       appendStepEvidence(mcpId, {
-        id: `${mcpId}-${Date.now()}-${Math.random()}`,
+        id: failedEvidenceId,
+        stepId: stepId || undefined,
         stepText,
         status: "failed",
         latencyMs,
@@ -652,6 +692,44 @@ function App() {
         timestamp: new Date().toISOString(),
         hallucinated: hallucinated || undefined,
         needsReview: needsReview || undefined,
+      });
+    });
+
+    source.addEventListener("tool_call_completed", (event) => {
+      const data = parseData(event);
+      const mcpId = getString(data.mcpId);
+      const stepId = getString(data.stepId);
+      const toolName = getString(data.toolName);
+      const toolCallIndex = getNumeric(data.toolCallIndex);
+      const args = (data.arguments && typeof data.arguments === "object") ? data.arguments as Record<string, unknown> : {};
+      const status = getString(data.status) === "error" ? "error" as const : "success" as const;
+      const latencyMs = getNumeric(data.latencyMs);
+      const result = getString(data.result);
+      const error = getString(data.error);
+      const screenshotId = getString(data.screenshotId);
+
+      setToolCallsByMcpAndStep((prev) => {
+        const mcpCalls = prev[mcpId] ?? {};
+        const stepCalls = mcpCalls[stepId] ?? [];
+        return {
+          ...prev,
+          [mcpId]: {
+            ...mcpCalls,
+            [stepId]: [
+              ...stepCalls,
+              {
+                toolId: `${toolName}-${toolCallIndex}`,
+                toolName,
+                arguments: args,
+                status,
+                latencyMs,
+                result: result || undefined,
+                error: error || undefined,
+                screenshotId: screenshotId || undefined,
+              },
+            ],
+          },
+        };
       });
     });
 
@@ -1094,6 +1172,8 @@ function App() {
                         closeEventSource(eventSourceRef);
                         setRunState("aborted");
                       }}
+                      toolCallsByMcpAndStep={toolCallsByMcpAndStep}
+                      messagesByMcpAndStep={messagesByMcpAndStep}
                     />
                   </section>
                 ) : runState === "completed" || runState === "aborted" ? (

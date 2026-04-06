@@ -16,6 +16,12 @@ interface McpColumnGridProps {
   lastScreenshotByMcp: Record<string, string | null>;
   isRunning: boolean;
   onAbort: () => void;
+  toolCallsByMcpAndStep?: Record<string, Record<string, Array<{
+    toolId: string; toolName: string; arguments: Record<string, unknown>;
+    status: "success" | "error"; latencyMs: number;
+    result?: string; error?: string; screenshotId?: string;
+  }>>>;
+  messagesByMcpAndStep?: Record<string, Record<string, string>>;
 }
 
 export function McpColumnGrid({
@@ -24,6 +30,8 @@ export function McpColumnGrid({
   lastScreenshotByMcp,
   isRunning,
   onAbort,
+  toolCallsByMcpAndStep,
+  messagesByMcpAndStep,
 }: McpColumnGridProps) {
   const [lightbox, setLightbox] = useState<LightboxState>({ open: false, title: "", url: "" });
   const containerRef = useRef<HTMLDivElement>(null);
@@ -83,6 +91,8 @@ export function McpColumnGrid({
                 steps={stepEvidenceByMcp[mcpId] ?? []}
                 lastScreenshotId={lastScreenshotByMcp[mcpId] ?? null}
                 onScreenshotClick={handleScreenshotClick}
+                toolCallsByStep={toolCallsByMcpAndStep?.[mcpId] ?? {}}
+                messagesByStep={messagesByMcpAndStep?.[mcpId] ?? {}}
               />
             </TabsContent>
           ))}
@@ -103,6 +113,8 @@ export function McpColumnGrid({
               steps={stepEvidenceByMcp[mcpId] ?? []}
               lastScreenshotId={lastScreenshotByMcp[mcpId] ?? null}
               onScreenshotClick={handleScreenshotClick}
+              toolCallsByStep={toolCallsByMcpAndStep?.[mcpId] ?? {}}
+              messagesByStep={messagesByMcpAndStep?.[mcpId] ?? {}}
             />
           ))}
         </div>
