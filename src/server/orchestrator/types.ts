@@ -59,6 +59,7 @@ export interface StepResult {
   latencyMs: number;
   message: string; // Spanish-friendly message for UI
   toolCalls: ToolCallTrace[];
+  screenshotId?: string;
   timestamp: string;
 }
 
@@ -66,8 +67,27 @@ export interface StepResult {
  * Orchestrator event for streaming to clients
  */
 export interface OrchestratorEvent {
-  type: "step_started" | "step_completed" | "run_completed" | "run_aborted" | "step_failed";
+  type: "step_started" | "step_completed" | "run_completed" | "run_aborted" | "step_failed" | "tool_call_started" | "tool_call_completed";
   payload: unknown;
+  timestamp: string;
+}
+
+/**
+ * Payload for granular tool-call SSE events (TRACE-07)
+ */
+export interface ToolCallEvent {
+  runId: string;
+  mcpId: string;
+  stepId: string;
+  stepIndex: number;
+  toolCallIndex: number;
+  toolName: string;
+  arguments: Record<string, unknown>;
+  status?: "success" | "error";
+  latencyMs?: number;
+  result?: string;
+  error?: string;
+  screenshotId?: string;
   timestamp: string;
 }
 
