@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Step-level execution traceability
 status: executing phase 01
-last_updated: "2026-04-06T10:40:00Z"
-stopped_at: "Wave 1 complete (01-01, 01-02)"
+last_updated: "2026-04-06T10:48:00Z"
+stopped_at: "Completed 01-04-PLAN.md — Video recording toggle and playback"
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 4
 current_phase: "01"
-current_plan: "03"
+current_plan: "04"
 ---
 
 # Project State
@@ -35,8 +35,8 @@ See: `.planning/PROJECT.md` (updated 2026-04-05)
 - [x] Milestone audit written and archived
 - [x] Phase 01 Plan 01 complete — backend screenshot pipeline + tool-call SSE events
 - [x] Phase 01 Plan 02 complete — StepDetailPanel with 4 tabs, McpColumn expand/collapse
-- [ ] Phase 01 Plan 03 — inline thumbnails + SSE wiring
-- [ ] Phase 01 Plan 04 — Video recording toggle + playback
+- [x] Phase 01 Plan 03 — inline thumbnails + SSE wiring
+- [x] Phase 01 Plan 04 — Video recording toggle + playback
 
 ## Decisions
 
@@ -64,7 +64,10 @@ See: `.planning/PROJECT.md` (updated 2026-04-05)
 - **01-01:** tool_call_completed SSE events emitted individually after step_started (D-07, TRACE-07)
 - **01-02:** StepDetailPanel created with Tools/Reasoning/Timing/Errors tabs
 - **01-02:** McpColumn wired with expand/collapse and ChevronDown rotation
+- **01-04:** recordVideo defaults to false (per D-08) and is propagated via PLAYWRIGHT_VIDEO_DIR env var to MCP process via McpProcessManager extraEnv parameter
+- **01-04:** McpProcessManager accepts optional extraEnv record, merged with process.env on spawn
+- **01-04:** Video player conditionally rendered in RunDetailView when videoUrl present (per D-09)
 
 ---
 
-Updated: 2026-04-06 — Wave 1 complete (01-01 backend + 01-02 frontend detail panel)
+Updated: 2026-04-06 — Wave 2 complete (01-03 SSE wiring + 01-04 video recording toggle and playback)
